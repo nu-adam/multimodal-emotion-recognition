@@ -2,35 +2,33 @@ import torch
 import torch.nn as nn
 
 
-class FusionModule(nn.Module):
-    def __init__(self, video_dim, audio_dim, text_dim, fused_dim):
-        """
-        Fusion module to combine video, audio and text features.
+class TransformerFusion(nn.Module):
+    """
+    Combines features from different modalities using a Transformer Encoder.
 
-        Args:
-            video_dim (int): Dimensionality of video features.
-            audio_dim (int): Dimensionality of audio features.
-            text_dim (int): Dimensionality of text features.
-            fused_dim (int): Dimensionality of the fused features.
-        """
-        super(FusionModule, self).__init__()
-        self.fc = nn.Linear(video_dim + audio_dim + text_dim, fused_dim)
-        self.activation = nn.ReLU()
+    Methods:
+        forward(video_features, audio_features, text_features): Combines features and encodes them.
+    """
+    def __init__(self, embed_dim=256, num_heads=4, num_layers=2):
+        super(TransformerFusion, self).__init__()
+        self.positional_encoding = nn.Parameter(torch.randn(1, 3, embed_dim))
+        transformer_layer = nn.TransformerEncoderLayer(d_model=embed_dim, nhead=num_heads, batch_first=True)
+        self.transformer = nn.TransformerEncoder(transformer_layer, num_layers=num_layers)
 
     def forward(self, video_features, audio_features, text_features):
         """
-        Forward pass for the fusion module.
+        Forward pass through the fusion module.
 
         Args:
-            image_features (torch.Tensor): Batch of image features (shape: [batch_size, image_dim]).
-            text_features (torch.Tensor): Batch of text features (shape: [batch_size, text_dim]).
+            video_features (torch.Tensor): Encoded video features of shape (batch_size, embed_dim).
+            audio_features (torch.Tensor): Encoded audio features of shape (batch_size, embed_dim).
+            text_features (torch.Tensor): Encoded text features of shape (batch_size, embed_dim).
 
         Returns:
-            torch.Tensor: Fused features (shape: [batch_size, fused_dim]).
+            torch.Tensor: Fused features of shape (batch_size, embed_dim).
         """
-        # Concatenate image and text features
-        combined_features = torch.cat((video_features, audio_features, text_features), dim=1)
-        # Apply fully connected layer and activation
-        fused_features = self.fc(combined_features)
-        fused_features = self.activation(fused_features)
-        return fused_features
+        features = torch.stack([video_features, audio_features, text_features], dim=1)  # Shape: (batch_size, 3, embed_dim)
+        features += self.positional_encoding
+        x = self.transformer(features)  # Shape: (batch_size, 3, embed_dim)
+        x = x.mean(dim=1)  # Shape: (batch_size, embed_dim)
+        return x

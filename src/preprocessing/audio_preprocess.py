@@ -1,25 +1,36 @@
-import os
-import torch
 import librosa
-from torchaudio.transforms import MelSpectrogram
+import numpy as np
+import moviepy.editor as mp
 
 
-# Constants
-SAMPLE_RATE = 16000
+def extract_audio_from_video(video_path, audio_save_path):
+    """
+    Extracts audio from a video file and saves it.
+
+    Args:
+        video_path (str): Path to the video file.
+        audio_save_path (str): Path to save the extracted audio file.
+
+    Returns:
+        str: Path to the saved audio file.
+    """
+    video = mp.VideoFileClip(video_path)
+    video.audio.write_audiofile(audio_save_path)
+    return audio_save_path
 
 
-def preprocess_audio(audio_path):
-    """Preprocess audio into Mel spectrogram."""
-    waveform, _ = librosa.load(audio_path, sr=SAMPLE_RATE)
-    mel_spec_transform = MelSpectrogram(sample_rate=SAMPLE_RATE)
-    waveform_tensor = torch.tensor(waveform).unsqueeze(0)  # Add channel dimension
-    mel_spectrogram = mel_spec_transform(waveform_tensor)
-    return torch.log1p(mel_spectrogram)
+def preprocess_audio(audio_path, sr=16000):
+    """
+    Loads and preprocesses audio for spectrogram extraction.
 
+    Args:
+        audio_path (str): Path to the audio file.
+        sr (int): Target sampling rate.
 
-def extract_audio_from_video(video_path):
-    """Extract audio from video."""
-    audio_path = video_path.replace('.mp4', '.wav')
-    command = f"ffmpeg -i {video_path} -q:a 0 -map a {audio_path} -y"
-    os.system(command)
-    return audio_path
+    Returns:
+        np.ndarray: Mel spectrogram of the audio.
+    """
+    audio, _ = librosa.load(audio_path, sr=sr)
+    mel_spectrogram = librosa.feature.melspectrogram(audio, sr=sr, n_mels=128, fmax=8000)
+    mel_spectrogram = librosa.power_to_db(mel_spectrogram, ref=np.max)
+    return mel_spectrogram

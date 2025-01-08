@@ -1,28 +1,50 @@
-import torch
-from transformers import BertTokenizer
-import speech_recognition as sr
+from transformers import AutoTokenizer
+import whisper
 
 
-# Constants
-MAX_TEXT_LENGTH = 50
+def transcribe_audio_to_srt(audio_path, transcript_save_path, model_name='base'): 
+    """
+    Transcribes audio into subtitles in SRT format using OpenAI Whisper.
 
-# Initialize Tokenizer
-bert_tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
+    Args:
+        audio_path (str): Path to the audio file.
+        transcript_save_path (str): Path to save the transcribed subtitles.
+        model_name (str): Whisper model name ('tiny', 'base', 'small', 'medium', 'large').
+
+    Returns:
+        str: Path to the SRT file.
+    """
+    model = whisper.load_model(model_name)
+    result = model.transcribe(audio_path, task="transcribe")
+    with open(transcript_save_path, "w", encoding="utf-8") as srt_file:
+        for segment in result["segments"]:
+            start = segment["start"]
+            end = segment["end"]
+            text = segment["text"]
+            srt_file.write(f"{segment['id'] + 1}\n")
+            srt_file.write(f"{start:.3f} --> {end:.3f}\n")
+            srt_file.write(f"{text}\n\n")
+    return transcript_save_path
 
 
-def extract_text_from_audio(audio_path):
-    """Transcribe audio to text using SpeechRecognition."""
-    recognizer = sr.Recognizer()
-    with sr.AudioFile(audio_path) as source:
-        audio_data = recognizer.record(source)
-    try:
-        text = recognizer.recognize_google(audio_data)
-    except sr.UnknownValueError:
-        text = ""
-    return text
+def preprocess_text(text, tokenizer_name='roberta-base', max_length=50):
+    """
+    Tokenizes text using a specified tokenizer.
 
+    Args:
+        text (str): Text to tokenize.
+        tokenizer_name (str): Pretrained tokenizer name.
+        max_length (int): Maximum sequence length.
 
-def preprocess_text(text):
-    """Preprocess text for embedding."""
-    tokens = bert_tokenizer(text, padding="max_length", truncation=True, max_length=MAX_TEXT_LENGTH, return_tensors="pt")
-    return tokens['input_ids'], tokens['attention_mask']
+    Returns:
+        dict: Tokenized inputs with 'input_ids' and 'attention_mask'.
+    """
+    tokenizer = AutoTokenizer.from_pretrained(tokenizer_name)
+    tokens = tokenizer(
+        text,
+        max_length=max_length,
+        padding='max_length',
+        truncation=True,
+        return_tensors='pt'
+    )
+    return tokens

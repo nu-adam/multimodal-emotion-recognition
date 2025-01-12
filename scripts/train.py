@@ -41,7 +41,7 @@ def main():
         enabled_modalities=enabled_modalities, 
         num_classes=7  # Adjust the number of classes as needed
     )
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    device = torch.device("mps" if torch.backends.mps.is_available() else "cuda" if torch.cuda.is_available() else "cpu")
     model.to(device)
 
     # Define the loss and optimizer

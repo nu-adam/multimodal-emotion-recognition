@@ -14,7 +14,7 @@ from src.config import data_dir, batch_size, enabled_modalities
 
 def main():
     checkpoint_path = os.path.join('checkpoints', 'best_model.pth')
-    device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
+    device = torch.device("mps" if torch.backends.mps.is_available() else "cuda" if torch.cuda.is_available() else "cpu")
 
     # Define the model
     model = MultimodalTransformer(enabled_modalities=enabled_modalities, num_classes=7)

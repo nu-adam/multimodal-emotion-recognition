@@ -67,11 +67,11 @@ class Trainer:
                 labels = labels.to(self.device)
 
                 # Debug input shapes
-                for modality, tensor in inputs.items():
-                    print(f"Validation {modality} input shape: {tensor.shape}")
+                # for modality, tensor in inputs.items():
+                #     print(f"Validation {modality} input shape: {tensor.shape}")
 
                 outputs = self.model(inputs)
-                print(f"Validation output shape: {outputs.shape}")  # Debug shape
+                # print(f"Validation output shape: {outputs.shape}")  # Debug shape
                 loss = self.criterion(outputs, labels)
                 running_loss += loss.item() * labels.size(0)
 
@@ -80,13 +80,24 @@ class Trainer:
         return val_loss
 
     def _log_best_model(self):
+        # Ensure the checkpoint directory exists
+        if not os.path.exists(self.checkpoint_dir):
+            try:
+                os.makedirs(self.checkpoint_dir, exist_ok=True)
+                print(f"Checkpoint directory created: {self.checkpoint_dir}")
+            except Exception as e:
+                raise RuntimeError(f"Failed to create checkpoint directory: {self.checkpoint_dir}. Error: {e}")
+
         if self.best_model_state:
             checkpoint_path = os.path.join(self.checkpoint_dir, 'best_model.pth')
-            torch.save({
-                'epoch': self.best_epoch,
-                'model_state_dict': self.best_model_state,
-                'best_loss': self.best_loss
-            }, checkpoint_path)
-            print(f"Best model saved at {checkpoint_path} from epoch {self.best_epoch} with validation loss {self.best_loss:.4f}")
+            try:
+                torch.save({
+                    'epoch': self.best_epoch,
+                    'model_state_dict': self.best_model_state,
+                    'best_loss': self.best_loss
+                }, checkpoint_path)
+                print(f"Best model saved at {checkpoint_path} from epoch {self.best_epoch} with validation loss {self.best_loss:.4f}")
+            except Exception as e:
+                raise RuntimeError(f"Failed to save the model checkpoint at {checkpoint_path}. Error: {e}")
         else:
             print("No best model found during training.")

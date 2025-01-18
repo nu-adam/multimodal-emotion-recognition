@@ -1,9 +1,10 @@
 import os
 import torch
 from torch.utils.data import Dataset
-import torchvision.transforms as T
 from torchvision.io import read_video
 from torchvision.transforms import ToPILImage
+from src.preprocessing.video_preprocess import extract_visual_features
+from src.preprocessing.text_preprocess import preprocess_text
 
 class EmotionDataset(Dataset):
     def __init__(self, data_dir, transform=None, enabled_modalities=['visual', 'audio', 'text']):
@@ -42,15 +43,16 @@ class EmotionDataset(Dataset):
         path, class_name = self.data[idx]
         features = {'visual': None, 'audio': None, 'text': None}
 
-        # Map class_name to an integer label
         label = self._get_label(class_name)
 
         if 'visual' in self.enabled_modalities:
-            features['visual'] = self._extract_visual_features(path)
+            features['visual'] = extract_visual_features(path, self.transform)
         if 'audio' in self.enabled_modalities:
             features['audio'] = self._extract_audio_features(path)
         if 'text' in self.enabled_modalities:
-            features['text'] = self._extract_text_features(path)
+            # TODO: provide text extraction in preprocessing/text_preprocess and use here
+            text_data = 'Today is the great day for training in the my favourite gym'
+            features['text'] = preprocess_text(text_data)
 
         return features, label
 

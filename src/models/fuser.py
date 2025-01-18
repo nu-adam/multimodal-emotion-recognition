@@ -1,8 +1,7 @@
 import torch
 import torch.nn as nn
 from src.models.visual.vgg19 import VGGFeatureExtractor, ProjectionNetwork
-from src.models.text import TextFeatureExtractor, ProjectionNetwork as TextProjectionNetwork
-
+from src.models.text.text import TextFeatureExtractor, ProjectionNetwork as TextProjectionNetwork
 
 
 class MultimodalTransformer(nn.Module):

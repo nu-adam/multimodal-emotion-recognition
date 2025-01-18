@@ -3,11 +3,11 @@ import torch
 import sys
 import os
 
-# Add the project root directory to sys.path
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
+# Dynamically add the project root directory to sys.path
+root_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+sys.path.append(root_dir)
 
 from src.models.text.text import TextFeatureExtractor, ProjectionNetwork
-
 
 # Define the string
 input_text = "Today is the great day for training in the my favourite gym"

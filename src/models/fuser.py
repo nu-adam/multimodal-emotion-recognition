@@ -1,6 +1,8 @@
 import torch
 import torch.nn as nn
 from src.models.visual.vgg19 import VGGFeatureExtractor, ProjectionNetwork
+from src.models.text import TextFeatureExtractor, ProjectionNetwork as TextProjectionNetwork
+
 
 
 class MultimodalTransformer(nn.Module):
@@ -19,7 +21,8 @@ class MultimodalTransformer(nn.Module):
         if 'audio' in self.enabled_modalities:
             self.audio_projector = ProjectionNetwork(input_dim=768, output_dim=embed_dim)
         if 'text' in self.enabled_modalities:
-            self.text_projector = ProjectionNetwork(input_dim=768, output_dim=embed_dim)
+            self.text_extractor = TextFeatureExtractor()
+            self.text_projector = TextProjectionNetwork(input_dim=768, output_dim=embed_dim)
 
         # Total input dimensions after concatenation
         # self.total_dim = embed_dim * len(self.enabled_modalities)
@@ -62,7 +65,7 @@ class MultimodalTransformer(nn.Module):
 
         # Text features
         if 'text' in self.enabled_modalities and 'text' in features:
-            text_features = features['text']  # Shape: (batch_size, 768)
+            text_features = self.text_extractor(features['text'])  # Shape: (batch_size, 768)
             text_features = self.text_projector(text_features.unsqueeze(1))  # Add sequence dim and project
             combined_features.append(text_features)  # Shape: (batch_size, 1, embed_dim)
 

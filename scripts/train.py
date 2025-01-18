@@ -9,7 +9,7 @@ from torch.utils.data import DataLoader
 from torchvision.transforms import Compose, Resize, ToTensor, Normalize
 
 from src.data.dataset import EmotionDataset
-from src.models.fuser import MultimodalTransformer
+from src.models.multimodal_emotion_recognition import MultimodalEmotionRecognition
 from src.training.trainer import Trainer
 from src.config import data_dir, batch_size, num_epochs, enabled_modalities, learning_rate
 
@@ -37,7 +37,7 @@ def main():
     dataloaders = {'train': train_loader, 'val': val_loader}
 
     # Initialize the model
-    model = MultimodalTransformer(
+    model = MultimodalEmotionRecognition(
         enabled_modalities=enabled_modalities, 
         num_classes=7  # Adjust the number of classes as needed
     )

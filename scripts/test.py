@@ -9,7 +9,7 @@ from torchvision import transforms
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 from src.data.dataset import EmotionDataset
-from src.models.fuser import MultimodalTransformer
+from src.models.multimodal_emotion_recognition import MultimodalEmotionRecognition
 from src.config import data_dir, batch_size, enabled_modalities
 
 def main():
@@ -17,7 +17,7 @@ def main():
     device = torch.device("mps" if torch.backends.mps.is_available() else "cuda" if torch.cuda.is_available() else "cpu")
 
     # Define the model
-    model = MultimodalTransformer(enabled_modalities=enabled_modalities, num_classes=7)
+    model = MultimodalEmotionRecognition(enabled_modalities=enabled_modalities, num_classes=7)
     model.to(device)
 
     # Load the checkpoint

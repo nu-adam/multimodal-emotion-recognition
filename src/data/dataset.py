@@ -6,6 +6,7 @@ from torchvision.transforms import ToPILImage
 from src.preprocessing.video_preprocess import extract_visual_features
 from src.preprocessing.text_preprocess import preprocess_text
 
+
 class EmotionDataset(Dataset):
     def __init__(self, data_dir, transform=None, enabled_modalities=['visual', 'audio', 'text']):
         """

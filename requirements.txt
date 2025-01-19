@@ -1,6 +1,8 @@
 torch
 torchvision
+facenet-pytorch
 transformers
 tqdm
 numpy
 av
+librosa

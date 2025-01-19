@@ -63,6 +63,7 @@ Temporary Items
 .ipynb_checkpoints/
 
 # Model checkpoints
+results/
 checkpoints/
 
 # Data files

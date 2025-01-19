@@ -1,6 +1,6 @@
-from models.encoders.video_encoder import VideoEncoder
-from models.encoders.audio_encoder import AudioEncoder
-from models.encoders.text_encoder import TextEncoder
+from src.models.encoders.video_encoder import VideoEncoder
+from src.models.encoders.audio_encoder import AudioEncoder
+from src.models.encoders.text_encoder import TextEncoder
 from src.models.fusion import TransformerFusion
 from src.models.decoder import Decoder
 
@@ -14,7 +14,7 @@ class MultimodalEmotionRecognition(nn.Module):
     This model integrates video, audio, and text encoders, combines their outputs
     using a fusion module, and decodes the fused embeddings into emotion predictions.
     """
-    def __init__(self, enabled_modalities=None, embed_dim=256, num_classes=7):
+    def __init__(self, enabled_modalities=None, embed_dim=256, num_heads=4, num_layers=2, num_classes=7):
         super(MultimodalEmotionRecognition, self).__init__()
         self.enabled_modalities = enabled_modalities or ['video']
 
@@ -25,7 +25,7 @@ class MultimodalEmotionRecognition(nn.Module):
         if 'text' in self.enabled_modalities:
             self.text_encoder = TextEncoder(embed_dim=embed_dim)
 
-        self.fusion = TransformerFusion(embed_dim=embed_dim)
+        self.fusion = TransformerFusion(embed_dim=embed_dim, num_heads=num_heads, num_layers=num_layers)
         self.decoder = Decoder(embed_dim=embed_dim, num_classes=num_classes)
 
     def forward(self, video, audio, text_input_ids, text_attention_mask):

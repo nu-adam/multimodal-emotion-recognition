@@ -1,4 +1,10 @@
 import os
+import sys
+
+# Add the root directory to the Python path
+root_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '../..'))
+sys.path.append(root_dir)
+
 import logging
 import torch
 import torch.optim as optim
@@ -7,7 +13,7 @@ from torch.cuda.amp import GradScaler
 from torch.utils.data import DataLoader
 
 from src.models.multimodal_emotion_recognition import MultimodalEmotionRecognition
-from src.data.dataset import MultimodalEmotionDataset
+from src.data.dataset import MultimodalEmotionDataset, collate_fn
 from src.training.train_utils import train_model
 from src.utils.logger import setup_logger
 
@@ -41,17 +47,27 @@ def train(enabled_modalities, data_dir, num_classes, batch_size, learning_rate, 
 
     # Load the dataset
     train_dataset = MultimodalEmotionDataset(
-    data_dir='data/train',
-    split='train',
-    enabled_modalities=enabled_modalities
+        data_dir='data/train',
+        split='train',
+        enabled_modalities=enabled_modalities
     )
     val_dataset = MultimodalEmotionDataset(
         data_dir='data/val',
         split='val',
         enabled_modalities=enabled_modalities
     )
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
-    val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
+    train_loader = DataLoader(
+        train_dataset,
+        batch_size=batch_size,
+        shuffle=True,
+        collate_fn=collate_fn
+    )
+    val_loader = DataLoader(
+        val_dataset, 
+        batch_size=batch_size, 
+        shuffle=False, 
+        collate_fn=collate_fn
+    )
     logger.info(f'Dataset loaded from {data_dir}.')
 
     # Initialize the model

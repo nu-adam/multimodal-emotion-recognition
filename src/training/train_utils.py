@@ -49,7 +49,7 @@ def train_one_epoch(model, enabled_modalities, train_loader, criterion, optimize
     running_loss = 0.0
 
     for batch in tqdm(train_loader, unit="batch", desc=f"Epoch {epoch+1}/{num_epochs} - Training", ncols=100):
-        inputs, labels = batch, batch['label']
+        inputs, labels = batch
         inputs = filter_enabled_modalities(inputs, enabled_modalities)
         inputs = {
             modality: (
@@ -113,7 +113,7 @@ def validate_one_epoch(model, enabled_modalities, val_loader, criterion, epoch, 
 
     with torch.no_grad():
         for batch in tqdm(val_loader, unit="batch", desc=f"Epoch {epoch+1}/{num_epochs} - Validation", ncols=100):
-            inputs, labels = batch, batch['label']
+            inputs, labels = batch
             inputs = filter_enabled_modalities(inputs, enabled_modalities)
             inputs = {
                 modality: (

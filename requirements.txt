@@ -6,3 +6,4 @@ tqdm
 numpy
 av
 librosa
+opencv-python

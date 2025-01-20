@@ -3,6 +3,7 @@ import logging
 import torch
 import torch.optim as optim
 import torch.nn as nn
+from torch.cuda.amp import GradScaler
 from torch.utils.data import DataLoader
 
 from src.models.multimodal_emotion_recognition import MultimodalEmotionRecognition
@@ -11,7 +12,7 @@ from src.training.train_utils import train_model
 from src.utils.logger import setup_logger
 
 
-def train(enabled_modalities, data_dir, num_classes, batch_size, learning_rate, num_epochs, checkpoint_dir, log_dir):
+def train(enabled_modalities, data_dir, num_classes, batch_size, learning_rate, max_grad, num_epochs, checkpoint_dir, log_dir):
     """
     Training for the Face Emotion Recognition model using transfer learning on the specified dataset.
 
@@ -21,6 +22,7 @@ def train(enabled_modalities, data_dir, num_classes, batch_size, learning_rate, 
     - num_classes (int): Number of emotion classes for classification.
     - batch_size (int, optional): Number of samples per batch to load. Default is 32.
     - learning_rate (float, optional): Learning rate for the optimizer. Default is 0.001.
+    - max_grad (float, optional): Maximum gradient norm for gradient clipping. Default is 1.0. 
     - num_epochs (int, optional): Number of epochs to train the model. Default is 10.
     - checkpoint_dir (str, optional): Directory to save model checkpoints. Default is 'results/checkpoints/'.
     - log_dir (str, optional): Directory to save training logs. Default is 'results/logs/'.
@@ -41,12 +43,12 @@ def train(enabled_modalities, data_dir, num_classes, batch_size, learning_rate, 
     train_dataset = MultimodalEmotionDataset(
     data_dir='data/train',
     split='train',
-    enabled_modalities=['video', 'audio', 'text']
+    enabled_modalities=enabled_modalities
     )
     val_dataset = MultimodalEmotionDataset(
         data_dir='data/val',
         split='val',
-        enabled_modalities=['video', 'audio', 'text']
+        enabled_modalities=enabled_modalities
     )
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
     val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
@@ -62,8 +64,8 @@ def train(enabled_modalities, data_dir, num_classes, batch_size, learning_rate, 
     criterion = nn.CrossEntropyLoss()
     optimizer = optim.Adam(model.parameters(), lr=learning_rate)
     scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=10, gamma=0.1)
-    max_grad = 1.0
-    scaler = torch.GradScaler(str(device))
+    scaler = GradScaler(str(device))
+    # scaler = torch.GradScaler(str(device))
 
     logger.info(f'Configuration:\n'
                 f'Batch Size: {batch_size}\n'
@@ -87,9 +89,10 @@ if __name__ == '__main__':
     NUM_CLASSES = 7
     BATCH_SIZE = 32
     LEARNING_RATE = 0.0001
+    MAX_GRAD = 1
     NUM_EPOCHS = 1
     CHECKPOINT_DIR = 'results/checkpoints/'
     LOG_DIR = 'results/logs/'
-    ENABLED_MODALITIES = ['video', 'audio', 'text']
+    ENABLED_MODALITIES = ['video']
 
-    train(ENABLED_MODALITIES, DATA_DIR, NUM_CLASSES, BATCH_SIZE, LEARNING_RATE, NUM_EPOCHS, CHECKPOINT_DIR, LOG_DIR)
+    train(ENABLED_MODALITIES, DATA_DIR, NUM_CLASSES, BATCH_SIZE, LEARNING_RATE, MAX_GRAD, NUM_EPOCHS, CHECKPOINT_DIR, LOG_DIR)

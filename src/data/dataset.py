@@ -99,7 +99,8 @@ class MultimodalEmotionDataset(Dataset):
             torch.Tensor: Preprocessed video features.
         """
         video_tensors = preprocess_video(file_path)
-        video_features = self.video_transform(video_tensors)
+        # video_features = self.video_transform(video_tensors)
+        video_features = video_tensors
         return video_features
 
     def _extract_audio_features(self, file_path):

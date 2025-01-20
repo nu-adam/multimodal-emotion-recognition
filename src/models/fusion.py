@@ -26,7 +26,9 @@ class TransformerFusion(nn.Module):
             torch.Tensor: Fused features of shape (batch_size, embed_dim).
         """
         features = torch.stack(modalities_features, dim=1)  # Shape: (batch_size, 3, embed_dim)
-        features += self.positional_encoding
+        num_modalities = features.size(1)
+        positional_encoding = self.positional_encoding[:, :num_modalities, :]
+        features += positional_encoding
         x = self.transformer(features)  # Shape: (batch_size, 3, embed_dim)
         x = x.mean(dim=1)  # Shape: (batch_size, embed_dim)
         return x

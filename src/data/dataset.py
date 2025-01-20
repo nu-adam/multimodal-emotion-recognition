@@ -1,6 +1,7 @@
 import os
 import torch
 from torch.utils.data import Dataset
+from torch.nn.utils.rnn import pad_sequence
 
 from src.data.transforms import get_video_transforms, get_audio_transforms
 from src.preprocessing.video_preprocess import preprocess_video
@@ -174,3 +175,31 @@ class MockMultimodalDataset(Dataset):
         data['label'] = torch.randint(0, self.num_classes, (1,)).item()
 
         return data
+
+def collate_fn(batch):
+    """
+    Custom collate function to pad video tensors to the same length.
+    
+    Args:
+        batch (list): List of tuples (features, label), where features is a dictionary.
+    
+    Returns:
+        dict: Batch of padded features.
+        torch.Tensor: Batch of labels.
+    """
+    features, labels = zip(*batch)
+    video_tensors = [f['video'] for f in features]
+
+    # Pad video tensors along the temporal dimension (frames)
+    padded_videos = pad_sequence(video_tensors, batch_first=True)
+
+    # Combine features into a dictionary
+    batch_features = {
+        'video': padded_videos,
+        # 'audio': torch.stack([f['audio'] for f in features]),
+        # 'text': torch.stack([f['text'] for f in features]),
+    }
+
+    batch_labels = torch.tensor(labels)
+
+    return batch_features, batch_labels

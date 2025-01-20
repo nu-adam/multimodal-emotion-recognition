@@ -1,9 +1,15 @@
 import os
+import sys
+
+# Add the root directory to the Python path
+root_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '../..'))
+sys.path.append(root_dir)
+
 import logging
 import torch
 from torch.utils.data import DataLoader
 
-from src.data.dataset import MultimodalEmotionDataset
+from src.data.dataset import MultimodalEmotionDataset, collate_fn
 from src.models.multimodal_emotion_recognition import MultimodalEmotionRecognition
 from src.training.test_utils import test_model
 from src.utils.logger import setup_logger
@@ -38,7 +44,7 @@ def test(enabled_modalities, data_dir, num_classes, batch_size, checkpoint_dir, 
         split='test',
         enabled_modalities=['video', 'audio', 'text']
     )
-    test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
+    test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, collate_fn=collate_fn)
     logger.info(f'Test dataset loaded from {data_dir}.')
 
     # Initialize the model

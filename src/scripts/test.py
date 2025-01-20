@@ -4,8 +4,8 @@ import torch
 from torch.utils.data import DataLoader
 
 from src.data.dataset import MultimodalEmotionDataset
-from src.training.test_utils import evaluate_model
 from src.models.multimodal_emotion_recognition import MultimodalEmotionRecognition
+from src.training.test_utils import test_model
 from src.utils.logger import setup_logger
 
 
@@ -34,8 +34,9 @@ def test(enabled_modalities, data_dir, num_classes, batch_size, checkpoint_dir, 
 
     # Load the dataset
     test_dataset = MultimodalEmotionDataset(
-        data_dir=f"{data_dir}/test",
-        enabled_modalities=enabled_modalities
+        data_dir='data/val',
+        split='test',
+        enabled_modalities=['video', 'audio', 'text']
     )
     test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
     logger.info(f'Test dataset loaded from {data_dir}.')
@@ -59,7 +60,7 @@ def test(enabled_modalities, data_dir, num_classes, batch_size, checkpoint_dir, 
     logger.info(f'Model checkpoint loaded from {checkpoint_path}.')
 
     # Evaluate the model
-    metrics = evaluate_model(model, test_loader, device, logger, enabled_modalities)
+    metrics = test_model(model, test_loader, device, logger, enabled_modalities)
 
     # Log the results
     logger.info(f'Testing completed. Metrics:\n'

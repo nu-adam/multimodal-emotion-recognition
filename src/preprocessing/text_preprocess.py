@@ -1,4 +1,5 @@
 from transformers import RobertaTokenizer
+from src.preprocessing.audio_preprocess import extract_audio
 
 
 def transcribe_audio(audio_path, transcript_path): 
@@ -15,7 +16,7 @@ def transcribe_audio(audio_path, transcript_path):
     pass
 
 
-def preprocess_text(input_text, max_length=50):
+def tokenize_text(input_text, max_length=50):
     """
     Preprocess text for input to a transformer model.
 
@@ -34,7 +35,25 @@ def preprocess_text(input_text, max_length=50):
         max_length=max_length, # Define the maximum length of tokens
         return_tensors="pt"    # Return PyTorch tensors
     )
-    return {
+    tokenized_text = {
         "input_ids": encoded_inputs["input_ids"],
         "attention_mask": encoded_inputs["attention_mask"]
     }
+    return tokenized_text
+
+
+def preprocess_text(input_video):
+    """
+    Preprocess text for input to a transformer model.
+
+    Args:
+    - input_text (str): The input text string.
+
+    Returns:
+    - dict: A dictionary containing 'input_ids' and 'attention_mask' as PyTorch tensors.
+    """
+    audio = extract_audio(input_video)
+    input_text = transcribe_audio(audio)
+    text_tensors = tokenize_text(input_text)
+    
+    return text_tensors

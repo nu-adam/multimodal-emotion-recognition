@@ -6,7 +6,7 @@ import torch.nn as nn
 from torch.utils.data import DataLoader
 
 from src.models.multimodal_emotion_recognition import MultimodalEmotionRecognition
-from src.data.dataset import MockMultimodalDataset
+from src.data.dataset import MultimodalEmotionDataset
 from src.training.train_utils import train_model
 from src.utils.logger import setup_logger
 
@@ -38,15 +38,15 @@ def train(enabled_modalities, data_dir, num_classes, batch_size, learning_rate, 
     logger.info(f'Using device: {device}')
 
     # Load the dataset
-    train_dataset = MockMultimodalDataset(
-        num_samples=1,
-        enabled_modalities=ENABLED_MODALITIES,
-        num_classes=NUM_CLASSES
+    train_dataset = MultimodalEmotionDataset(
+    data_dir='data/train',
+    split='train',
+    enabled_modalities=['video', 'audio', 'text']
     )
-    val_dataset = MockMultimodalDataset(
-        num_samples=1,
-        enabled_modalities=ENABLED_MODALITIES,
-        num_classes=NUM_CLASSES
+    val_dataset = MultimodalEmotionDataset(
+        data_dir='data/val',
+        split='val',
+        enabled_modalities=['video', 'audio', 'text']
     )
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
     val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)

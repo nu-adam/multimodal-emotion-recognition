@@ -1,19 +1,21 @@
 from transformers import RobertaTokenizer
 from src.preprocessing.audio_preprocess import extract_audio
+import whisper
 
+model = whisper.load_model("light")
 
-def transcribe_audio(audio_path, transcript_path): 
+def transcribe_audio(audio_path): 
     """
     Transcribes audio into subtitles in SRT format using OpenAI Whisper.
 
     Args:
         audio_path (str): Path to the audio file.
-        transcript_path (str): Path to save the transcribed subtitles.
 
     Returns:
         str: Path to the transcript file.
     """
-    pass
+    result = model.transcribe(audio_path)
+    return result['text']
 
 
 def tokenize_text(input_text, max_length=50):

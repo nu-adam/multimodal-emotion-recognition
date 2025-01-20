@@ -7,3 +7,4 @@ numpy
 av
 librosa
 opencv-python
+scikit-learn

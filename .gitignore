@@ -67,7 +67,7 @@ results/
 checkpoints/
 
 # Data files
-data/
+/data/
 
 # Test results
 coverage/

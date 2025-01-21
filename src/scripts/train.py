@@ -11,6 +11,7 @@ import torch.optim as optim
 import torch.nn as nn
 from torch.cuda.amp import GradScaler
 from torch.utils.data import DataLoader
+from functools import partial
 
 from src.models.multimodal_emotion_recognition import MultimodalEmotionRecognition
 from src.data.dataset import MultimodalEmotionDataset, collate_fn
@@ -56,17 +57,18 @@ def train(enabled_modalities, data_dir, num_classes, batch_size, learning_rate, 
         split='val',
         enabled_modalities=enabled_modalities
     )
+    custom_collate_fn = partial(collate_fn, enabled_modalities=enabled_modalities)
     train_loader = DataLoader(
         train_dataset,
         batch_size=batch_size,
         shuffle=True,
-        collate_fn=collate_fn
+        collate_fn=custom_collate_fn
     )
     val_loader = DataLoader(
         val_dataset, 
         batch_size=batch_size, 
         shuffle=False, 
-        collate_fn=collate_fn
+        collate_fn=custom_collate_fn
     )
     logger.info(f'Dataset loaded from {data_dir}.')
 
@@ -109,6 +111,6 @@ if __name__ == '__main__':
     NUM_EPOCHS = 1
     CHECKPOINT_DIR = 'results/checkpoints/'
     LOG_DIR = 'results/logs/'
-    ENABLED_MODALITIES = ['video']
+    ENABLED_MODALITIES = ['video', 'audio', 'text']
 
     train(ENABLED_MODALITIES, DATA_DIR, NUM_CLASSES, BATCH_SIZE, LEARNING_RATE, MAX_GRAD, NUM_EPOCHS, CHECKPOINT_DIR, LOG_DIR)

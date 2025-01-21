@@ -8,6 +8,7 @@ sys.path.append(root_dir)
 import logging
 import torch
 from torch.utils.data import DataLoader
+from functools import partial
 
 from src.data.dataset import MultimodalEmotionDataset, collate_fn
 from src.models.multimodal_emotion_recognition import MultimodalEmotionRecognition
@@ -44,7 +45,13 @@ def test(enabled_modalities, data_dir, num_classes, batch_size, checkpoint_dir, 
         split='test',
         enabled_modalities=['video', 'audio', 'text']
     )
-    test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, collate_fn=collate_fn)
+    custom_collate_fn = partial(collate_fn, enabled_modalities=enabled_modalities)
+    test_loader = DataLoader(
+        test_dataset, 
+        batch_size=batch_size, 
+        shuffle=False, 
+        collate_fn=custom_collate_fn
+    )
     logger.info(f'Test dataset loaded from {data_dir}.')
 
     # Initialize the model

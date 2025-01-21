@@ -176,30 +176,35 @@ class MockMultimodalDataset(Dataset):
 
         return data
 
-def collate_fn(batch):
+def collate_fn(batch, enabled_modalities):
     """
-    Custom collate function to pad video tensors to the same length.
+    Custom collate function to pad tensors for enabled modalities.
     
     Args:
         batch (list): List of tuples (features, label), where features is a dictionary.
+        enabled_modalities (list): List of enabled modalities, e.g., ['video', 'audio', 'text'].
     
     Returns:
-        dict: Batch of padded features.
+        dict: Batch of padded features for enabled modalities.
         torch.Tensor: Batch of labels.
     """
     features, labels = zip(*batch)
-    video_tensors = [f['video'] for f in features]
-
-    # Pad video tensors along the temporal dimension (frames)
-    padded_videos = pad_sequence(video_tensors, batch_first=True)
-
-    # Combine features into a dictionary
-    batch_features = {
-        'video': padded_videos,
-        # 'audio': torch.stack([f['audio'] for f in features]),
-        # 'text': torch.stack([f['text'] for f in features]),
-    }
-
+    
+    batch_features = {}
+    
+    # Process each enabled modality
+    if 'video' in enabled_modalities:
+        video_tensors = [f['video'] for f in features]
+        batch_features['video'] = pad_sequence(video_tensors, batch_first=True)
+    
+    if 'audio' in enabled_modalities:
+        audio_tensors = [f['audio'] for f in features]
+        batch_features['audio'] = torch.stack(audio_tensors)
+    
+    if 'text' in enabled_modalities:
+        text_tensors = [f['text'] for f in features]
+        batch_features['text'] = torch.stack(text_tensors)
+    
     batch_labels = torch.tensor(labels)
 
     return batch_features, batch_labels

@@ -8,3 +8,4 @@ av
 librosa
 opencv-python
 scikit-learn
+openai-whisper

@@ -1,8 +1,11 @@
 from transformers import RobertaTokenizer
 from src.preprocessing.audio_preprocess import extract_audio
 import whisper
+import ssl
+ssl._create_default_https_context = ssl._create_unverified_context
 
-model = whisper.load_model("light")
+# model = whisper.load_model("light")
+model = whisper.load_model("tiny")
 
 def transcribe_audio(audio_path): 
     """
@@ -44,18 +47,28 @@ def tokenize_text(input_text, max_length=50):
     return tokenized_text
 
 
+import os
+
 def preprocess_text(input_video):
     """
     Preprocess text for input to a transformer model.
 
     Args:
-    - input_text (str): The input text string.
+        input_video (str): Path to the video file.
 
     Returns:
-    - dict: A dictionary containing 'input_ids' and 'attention_mask' as PyTorch tensors.
+        dict: A dictionary containing 'input_ids' and 'attention_mask' as PyTorch tensors.
     """
-    audio = extract_audio(input_video)
+    # Generate the audio path by replacing the video extension with `.wav`
+    audio_path = os.path.splitext(input_video)[0] + ".wav"
+    
+    # Extract audio from the video
+    audio = extract_audio(input_video, audio_path)
+    
+    # Transcribe the audio to text
     input_text = transcribe_audio(audio)
+    
+    # Tokenize the transcribed text
     text_tensors = tokenize_text(input_text)
     
     return text_tensors

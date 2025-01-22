@@ -2,6 +2,8 @@ import cv2
 import torch
 from facenet_pytorch import MTCNN
 from torchvision import transforms
+from PIL import Image
+import numpy as np
 
 
 def extract_frames(video_path, frame_rate=1):
@@ -107,5 +109,17 @@ def preprocess_video(video_path, frame_rate=1, input_size=(224, 224)):
         face_tensor = preprocess_face(face_crop, input_size=input_size)
         video_tensors.append(face_tensor)
 
+    if not video_tensors:
+        return None  # No faces detected in the video
+
     video_tensors = torch.stack(video_tensors)
     return video_tensors
+
+def tensor_to_pil(tensor):
+    """
+    Converts a torch.Tensor to PIL.Image.
+    Assumes the tensor is in CHW format and values are normalized between 0 and 1.
+    """
+    if tensor.ndim == 3:
+        tensor = tensor.permute(1, 2, 0).numpy()  # Convert CHW to HWC
+    return Image.fromarray((tensor * 255).astype(np.uint8))

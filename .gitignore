@@ -68,6 +68,7 @@ checkpoints/
 
 # Data files
 /data/
+/processed_audio/
 
 # Test results
 coverage/

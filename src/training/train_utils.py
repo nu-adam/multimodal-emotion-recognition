@@ -85,6 +85,8 @@ def train_one_epoch(model, enabled_modalities, train_loader, criterion, optimize
         
         batch_size = next(iter(inputs.values())).size(0) if inputs else 0
         running_loss += loss.item() * batch_size
+        del inputs, labels, outputs, loss  # Free up memory
+        torch.cuda.empty_cache()  # Clear unused GPU memory
 
     epoch_loss = running_loss / len(train_loader.dataset)
     return epoch_loss
@@ -138,6 +140,8 @@ def validate_one_epoch(model, enabled_modalities, val_loader, criterion, epoch, 
             _, predicted = torch.max(outputs, 1)
             total += labels.size(0)
             correct += (predicted == labels).sum().item()
+            del inputs, labels, outputs, loss  # Free up memory
+            torch.cuda.empty_cache()  # Clear unused GPU memory 
 
     epoch_loss = running_loss / len(val_loader.dataset)
     accuracy = correct / total

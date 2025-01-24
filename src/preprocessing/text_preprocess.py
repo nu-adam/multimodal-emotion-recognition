@@ -49,7 +49,7 @@ def tokenize_text(input_text, max_length=50):
 
 import os
 
-def preprocess_text(input_video):
+def preprocess_text(output_audio_path):
     """
     Preprocess text for input to a transformer model.
 
@@ -60,13 +60,11 @@ def preprocess_text(input_video):
         dict: A dictionary containing 'input_ids' and 'attention_mask' as PyTorch tensors.
     """
     # Generate the audio path by replacing the video extension with `.wav`
-    audio_path = os.path.splitext(input_video)[0] + ".wav"
     
     # Extract audio from the video
-    audio = extract_audio(input_video, audio_path)
     
     # Transcribe the audio to text
-    input_text = transcribe_audio(audio)
+    input_text = transcribe_audio(output_audio_path)
     
     # Tokenize the transcribed text
     text_tensors = tokenize_text(input_text)

@@ -46,7 +46,8 @@ def detect_faces(frame):
     Returns:
     - boxes (list): List of bounding boxes for detected faces, each in (x1, y1, x2, y2) format.
     """
-    model = MTCNN(keep_all=True)
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    model = MTCNN(keep_all=True, device=device)
     boxes, _ = model.detect(frame)
     return boxes
 

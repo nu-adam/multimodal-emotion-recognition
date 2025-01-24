@@ -61,12 +61,16 @@ def train(enabled_modalities, data_dir, num_classes, batch_size, learning_rate, 
     train_loader = DataLoader(
         train_dataset,
         batch_size=batch_size,
+        num_workers=4,
+        pin_memory=True,
         shuffle=True,
         collate_fn=custom_collate_fn
     )
     val_loader = DataLoader(
         val_dataset, 
         batch_size=batch_size, 
+        num_workers=4,
+        pin_memory=True,
         shuffle=False, 
         collate_fn=custom_collate_fn
     )
@@ -82,7 +86,7 @@ def train(enabled_modalities, data_dir, num_classes, batch_size, learning_rate, 
     criterion = nn.CrossEntropyLoss()
     optimizer = optim.Adam(model.parameters(), lr=learning_rate)
     scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=10, gamma=0.1)
-    scaler = GradScaler(str(device))
+    scaler = GradScaler()
     # scaler = torch.GradScaler(str(device))
 
     logger.info(f'Configuration:\n'
@@ -103,9 +107,9 @@ def train(enabled_modalities, data_dir, num_classes, batch_size, learning_rate, 
 
 if __name__ == '__main__':
     # Configuration parameters
-    DATA_DIR = r'C:\dev\her-emotion-recognition\data'
+    DATA_DIR = r'D:\Senior_Project\multimodal-emotion-recognition\data'
     NUM_CLASSES = 7
-    BATCH_SIZE = 32
+    BATCH_SIZE = 16
     LEARNING_RATE = 0.0001
     MAX_GRAD = 1
     NUM_EPOCHS = 1

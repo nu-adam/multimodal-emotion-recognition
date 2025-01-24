@@ -15,32 +15,40 @@ def extract_audio(video_path, audio_path):
     Returns:
     - str: Path to the saved audio file.
     """
-    if os.path.exists(audio_path):
-        print(f"Audio file already exists: {audio_path}. Skipping conversion.")
-    else:
-        subprocess.run(["ffmpeg", "-i", video_path, audio_path], check=True)
-        print(f"Audio extraction complete: {audio_path}")
+    if not os.path.exists(audio_path):
+        subprocess.run(["ffmpeg", "-i", video_path, audio_path], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    
     return audio_path
 
 
-def preprocess_audio(video_path):
+def preprocess_audio(video_path, output_audio_base_dir="processed_audio"):
     """
-    Loads and preprocesses audio for spectrogram extraction.
+    Loads and preprocesses audio for spectrogram extraction and saves the audio in a separate folder.
 
     Args:
     - video_path (str): Path to the video file.
+    - output_audio_base_dir (str): Base directory where extracted audio files will be saved.
 
     Returns:
     - torch.Tensor: Batch of preprocessed audio tensors.
     """
-    # Define the output audio path (e.g., with a `.wav` extension)
-    audio_path = os.path.splitext(video_path)[0] + ".wav"
+    # Ensure the output base directory exists
+    os.makedirs(output_audio_base_dir, exist_ok=True)
+    
+    # Get relative path from the 'data' folder
+    relative_path = os.path.relpath(video_path, start="data")
+    # Replace video extension with .wav
+    relative_audio_path = os.path.splitext(relative_path)[0] + ".wav"
+    
+    # Create full path for the output audio
+    output_audio_path = os.path.join(output_audio_base_dir, relative_audio_path)
+    os.makedirs(os.path.dirname(output_audio_path), exist_ok=True)  # Ensure subdirectories exist
     
     # Extract audio from the video
-    audio_path = extract_audio(video_path, audio_path)
+    output_audio_path = extract_audio(video_path, output_audio_path)
     
     # Load the audio file
-    y, sr = librosa.load(audio_path)
+    y, sr = librosa.load(output_audio_path)
     
     # Generate Mel spectrogram
     S = librosa.feature.melspectrogram(y=y, sr=sr, n_mels=128)
@@ -59,4 +67,5 @@ def preprocess_audio(video_path):
     
     # Duplicate channels to create (3, 224, 224)
     S_tensor = S_resized.repeat(3, 1, 1)
-    return S_tensor
+    return S_tensor, output_audio_path
+

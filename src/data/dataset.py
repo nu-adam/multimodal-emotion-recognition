@@ -59,9 +59,9 @@ class MultimodalEmotionDataset(Dataset):
                 return self.__getitem__((idx + 1) % len(self))
 
         if 'audio' in self.enabled_modalities:
-            features['audio'] = self._extract_audio_features(file_path)
+            features['audio'], output_audio_path = self._extract_audio_features(file_path)
         if 'text' in self.enabled_modalities:
-            features['text'] = self._extract_text_features(file_path)
+            features['text'] = self._extract_text_features(output_audio_path)
 
         return features, label
 
@@ -126,29 +126,28 @@ class MultimodalEmotionDataset(Dataset):
             torch.Tensor: Preprocessed audio features.
         """
         # Preprocess the audio to get a spectrogram tensor
-        audio_tensors = preprocess_audio(file_path)
-
+        audio_tensors, output_audio_path = preprocess_audio(file_path)
         # Convert torch.Tensor to numpy.ndarray for compatibility with transforms
-        if isinstance(audio_tensors, torch.Tensor):
-            audio_array = audio_tensors.squeeze().numpy()  # Remove extra dimensions, if any
-            audio_array = (audio_array * 255).astype(np.uint8)  # Scale to [0, 255]
+        # if isinstance(audio_tensors, torch.Tensor):
+        #     audio_array = audio_tensors.squeeze().numpy()  # Remove extra dimensions, if any
+        #     audio_array = (audio_array * 255).astype(np.uint8)  # Scale to [0, 255]
             
-            # Ensure the array has the correct shape for grayscale or RGB
-            if audio_array.ndim == 2:  # Grayscale
-                audio_image = Image.fromarray(audio_array)
-            elif audio_array.ndim == 3 and audio_array.shape[0] == 3:  # RGB-like tensor
-                audio_image = Image.fromarray(np.transpose(audio_array, (1, 2, 0)))  # Convert (C, H, W) to (H, W, C)
-            else:
-                print(f"Unexpected shape for audio_array: {audio_array.shape}")
-                return None
+        #     # Ensure the array has the correct shape for grayscale or RGB
+        #     if audio_array.ndim == 2:  # Grayscale
+        #         audio_image = Image.fromarray(audio_array)
+        #     elif audio_array.ndim == 3 and audio_array.shape[0] == 3:  # RGB-like tensor
+        #         audio_image = Image.fromarray(np.transpose(audio_array, (1, 2, 0)))  # Convert (C, H, W) to (H, W, C)
+        #     else:
+        #         print(f"Unexpected shape for audio_array: {audio_array.shape}")
+        #         return None
 
-            # Apply the audio transform
-            audio_features = self.audio_transform(audio_image)
-        else:
-            print(f"Unexpected type for audio_tensors: {type(audio_tensors)}")
-            return None
+        #     # Apply the audio transform
+        #     audio_features = self.audio_transform(audio_image)
+        # else:
+        #     print(f"Unexpected type for audio_tensors: {type(audio_tensors)}")
+        #     return None
 
-        return audio_features
+        return audio_tensors, output_audio_path
 
 
 

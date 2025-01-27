@@ -1,126 +1,148 @@
+import ray
+from insightface.app import FaceAnalysis
+import torchvision.transforms as T
 import cv2
 import torch
-from facenet_pytorch import MTCNN
-from torchvision import transforms
-from PIL import Image
-import numpy as np
+import os
+from glob import glob
 
 
-def extract_frames(video_path, frame_rate=1):
+@ray.remote(num_gpus=1)
+class FaceDetector:
     """
-    Extracts frames from a video at a specified frame rate.
+    Ray Actor for face detection using InsightFace.
+
+    Attributes:
+        model (FaceAnalysis): InsightFace model for face detection.
+    """
+    def __init__(self):
+        """
+        Initializes the face detector with the InsightFace model.
+        """
+        self.model = FaceAnalysis(name="buffalo_l", providers=["CUDAExecutionProvider"])
+        self.model.prepare(ctx_id=0)
+
+    def detect_faces(self, frame):
+        """
+        Detect faces in a single video frame and return cropped tensors.
+
+        Args:
+            frame (np.ndarray): A single video frame in RGB format.
+
+        Returns:
+            List[torch.Tensor]: A list of cropped face tensors with shape [3, 224, 224].
+        """
+        faces = self.model.get(frame)
+        tensors = []
+        for face in faces:
+            x1, y1, x2, y2 = map(int, face.bbox)
+            cropped = frame[y1:y2, x1:x2]
+            resized = cv2.resize(cropped, (224, 224))
+            tensor = T.ToTensor()(resized)
+            tensors.append(tensor)
+        return tensors
+
+
+def process_video(video_path, face_detector_actor):
+    """
+    Preprocesses a video by extracting frames and detecting faces.
 
     Args:
-    - video_path (str): Path to the video file.
-    - frame_rate (int): Number of frames to extract per second.
+        video_path (str): Path to the video file.
+        face_detector_actor (ray.actor.ActorHandle): A Ray Actor for face detection.
 
     Returns:
-    - list: List of extracted frames as numpy arrays.
+        torch.Tensor: A batch of face tensors with shape [num_faces, 3, 224, 224].
+        If no faces are detected, returns an empty tensor.
     """
-    video_capture = cv2.VideoCapture(video_path)
-    fps = int(video_capture.get(cv2.CAP_PROP_FPS))
-    frame_interval = max(1, fps // frame_rate)
-    video_frames = []
-
+    # Step 1: Load video and extract frames (1 frame per second)
+    cap = cv2.VideoCapture(video_path)
+    fps = int(cap.get(cv2.CAP_PROP_FPS))
     frame_count = 0
-    while video_capture.isOpened():
-        ret, frame = video_capture.read()
+    frames = []
+    while cap.isOpened():
+        ret, frame = cap.read()
         if not ret:
             break
-        if frame_count % frame_interval == 0:
-            frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            video_frames.append(frame)
+        if frame_count % fps == 0:  # Take 1 frame per second
+            frames.append(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
         frame_count += 1
+    cap.release()
 
-    video_capture.release()
-    return video_frames
+    # Step 2: Perform face detection using the Actor
+    batched_faces = []
+    for frame in frames:
+        detected_tensors = ray.get(face_detector_actor.detect_faces.remote(frame))
+        batched_faces.extend(detected_tensors)
+
+    # Step 3: Handle edge case: No faces detected
+    if not batched_faces:
+        print(f"[WARNING] No faces detected in video: {video_path}")
+        return torch.empty(0)  # Return an empty tensor if no faces are detected
+
+    # Step 4: Save batched tensors
+    return torch.stack(batched_faces)  # Shape: [num_faces, 3, 224, 224]
 
 
-def detect_faces(frame):
+@ray.remote
+def preprocess_video_task(video_path, face_detector_actor):
     """
-    Detect faces in a given frame using MTCNN.
+    Processes a video file and saves the resulting face tensors.
 
     Args:
-    - frame (numpy array): The input frame in RGB format.
+        video_path (str): Path to the video file.
+        face_detector_actor (ray.actor.ActorHandle): A Ray Actor for face detection.
 
     Returns:
-    - boxes (list): List of bounding boxes for detected faces, each in (x1, y1, x2, y2) format.
+        str: Path to the saved tensor file.
     """
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    model = MTCNN(keep_all=True, device=device)
-    boxes, _ = model.detect(frame)
-    return boxes
+    batched_faces = process_video(video_path, face_detector_actor)
+    output_path = video_path.replace("raw", "processed").replace(".mp4", ".pth")
+    
+    # Save only if there are detected faces
+    if batched_faces.numel() > 0:  # Check if the tensor is not empty
+        torch.save(batched_faces, output_path)
+    else:
+        print(f"[INFO] No tensors saved for video: {video_path} (No faces detected)")
+
+    return output_path
 
 
-def crop_faces(frame, box):
+def get_video_paths(raw_dir):
     """
-    Crops faces from the frame based on the provided bounding boxes.
+    Recursively finds all video files in the dataset directory.
 
     Args:
-    - frame (numpy array): The input frame in RGB format.
-    - box (list): List of bounding boxes for detected faces.
+        raw_dir (str): Path to the raw dataset directory.
 
     Returns:
-    - face_crops (list of numpy arrays): List of cropped face images.
+        List[str]: A list of paths to video files.
     """
-    x1, y1, x2, y2 = map(int, box)
-    face_crop = frame[y1:y2, x1:x2]
-    return face_crop
+    # return glob(os.path.join(raw_dir, "**", "*.mp4"), recursive=True)
+    return glob(os.path.join(raw_dir, "*.mp4"), recursive=True)
 
 
-def preprocess_face(face_crop, input_size=(224, 224)):
+def main():
     """
-    Preprocesses a single face crop for the emotion recognition model.
-
-    Args:
-    - face_crop (numpy.ndarray): The cropped face image in RGB format.
-
-    Returns:
-    - torch.Tensor: Preprocessed face tensor ready for model input.
+    Main function to preprocess all videos in the dataset using Ray Actors.
     """
-    preprocess_transform = transforms.Compose([
-        transforms.ToPILImage(),
-        transforms.Resize(input_size),
-        transforms.ToTensor(),
-    ])
-    face_tensor = preprocess_transform(face_crop)
-    return face_tensor
+    ray.init()  # Initialize Ray
 
+    # Step 1: Start the FaceDetector Actor
+    face_detector_actor = FaceDetector.remote()
 
-def preprocess_video(video_path, frame_rate=1, input_size=(224, 224)):
-    """
-    Preprocesses a video to extract and preprocess face tensors for emotion recognition.
+    # Step 2: Get all video paths
+    raw_dir = "data/raw/test/disgust"
+    video_paths = get_video_paths(raw_dir)
 
-    Args:
-    - video_path (str): Path to the video file.
-    - frame_rate (int): Number of frames to extract per second.
-    - input_size (tuple): Desired input size for the model (height, width).
+    # Step 3: Launch preprocessing tasks in parallel
+    futures = [preprocess_video_task.remote(video_path, face_detector_actor) for video_path in video_paths]
 
-    Returns:
-    - torch.Tensor: Batch of preprocessed video tensors.
-    """
-    video_frames = extract_frames(video_path, frame_rate)
+    # Step 4: Wait for all tasks to complete and get results
+    results = ray.get(futures)
+    print("All videos processed. Saved to:")
+    for result in results:
+        print(result)
 
-    video_tensors = []
-    for frame in video_frames:
-        boxes = detect_faces(frame)
-        if boxes is None:
-            continue
-        face_crop = crop_faces(frame, boxes[0]) # TODO: iterate over boxes for multiple faces
-        face_tensor = preprocess_face(face_crop, input_size=input_size)
-        video_tensors.append(face_tensor)
-
-    if not video_tensors:
-        return None  # No faces detected in the video
-
-    video_tensors = torch.stack(video_tensors)
-    return video_tensors
-
-def tensor_to_pil(tensor):
-    """
-    Converts a torch.Tensor to PIL.Image.
-    Assumes the tensor is in CHW format and values are normalized between 0 and 1.
-    """
-    if tensor.ndim == 3:
-        tensor = tensor.permute(1, 2, 0).numpy()  # Convert CHW to HWC
-    return Image.fromarray((tensor * 255).astype(np.uint8))
+if __name__ == "__main__":
+    main()

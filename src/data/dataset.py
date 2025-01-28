@@ -4,38 +4,36 @@ from torch.utils.data import Dataset
 from torch.nn.utils.rnn import pad_sequence
 
 
-def custom_collate_fn(batch):
+def custom_collate_fn(batch, modalities=["video", "audio", "text"]):
     """
-    Custom collate function for multimodal data with padding.
+    Custom collate function for multimodal data with padding, respecting enabled modalities.
 
     Args:
         batch (list[dict]): A batch of samples from the dataset.
+        modalities (list): List of modalities to include (e.g., ['video', 'audio', 'text']).
 
     Returns:
-        dict: A dictionary containing padded tensors for each modality.
+        dict: A dictionary containing padded tensors for each enabled modality, labels, and video IDs.
     """
     collated_batch = {"label": [], "video_id": []}
 
-    # Collate video frames
-    if "video" in batch[0]:
-        video_tensors = [sample["video"] for sample in batch]
-        collated_batch["video"] = pad_sequence(video_tensors, batch_first=True, padding_value=0)
+    # Process each enabled modality
+    for modality in modalities:
+        if modality in batch[0]:  # Check if the modality exists in the sample
+            if modality == "text":
+                # Special handling for text (input IDs and attention masks)
+                input_ids = [sample[modality]["input_ids"].squeeze(0) for sample in batch]
+                attention_masks = [sample[modality]["attention_mask"].squeeze(0) for sample in batch]
+                collated_batch[modality] = {
+                    "input_ids": pad_sequence(input_ids, batch_first=True, padding_value=0),
+                    "attention_mask": pad_sequence(attention_masks, batch_first=True, padding_value=0),
+                }
+            else:
+                # Pad other modalities (e.g., video, audio)
+                modality_tensors = [sample[modality] for sample in batch]
+                collated_batch[modality] = pad_sequence(modality_tensors, batch_first=True, padding_value=0)
 
-    # Collate audio spectrograms
-    if "audio" in batch[0]:
-        audio_tensors = [sample["audio"] for sample in batch]
-        collated_batch["audio"] = pad_sequence(audio_tensors, batch_first=True, padding_value=0)
-
-    # Collate text data (input IDs and attention masks)
-    if "text" in batch[0]:
-        input_ids = [sample["text"]["input_ids"].squeeze(0) for sample in batch]
-        attention_masks = [sample["text"]["attention_mask"].squeeze(0) for sample in batch]
-        collated_batch["text"] = {
-            "input_ids": pad_sequence(input_ids, batch_first=True, padding_value=0),
-            "attention_mask": pad_sequence(attention_masks, batch_first=True, padding_value=0),
-        }
-
-    # Collate labels
+    # Collate labels (convert to tensor)
     collated_batch["label"] = torch.tensor([sample["label"] for sample in batch])
 
     # Collate video IDs

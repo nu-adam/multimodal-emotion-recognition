@@ -2,7 +2,7 @@ from tqdm import tqdm
 import torch
 
 
-def filter_enabled_modalities(inputs, enabled_modalities):
+def filter_enabled_modalities(inputs, modalities):
     """
     Filters the inputs dictionary to include only the enabled modalities.
 
@@ -13,7 +13,7 @@ def filter_enabled_modalities(inputs, enabled_modalities):
     Returns:
     - dict: Filtered inputs containing only the enabled modalities.
     """
-    return {modality: inputs[modality] for modality in enabled_modalities if modality in inputs}
+    return {modality: inputs[modality] for modality in modalities if modality in inputs}
 
 
 def save_model(state, checkpoint_dir):
@@ -49,44 +49,38 @@ def train_one_epoch(model, enabled_modalities, train_loader, criterion, optimize
     running_loss = 0.0
 
     for batch in tqdm(train_loader, unit="batch", desc=f"Epoch {epoch+1}/{num_epochs} - Training", ncols=100):
-        inputs, labels = batch
-        inputs = filter_enabled_modalities(inputs, enabled_modalities)
+        # Extract labels
+        labels = batch["label"].to(device)
+
+        # Extract inputs, filtering by enabled modalities
         inputs = {
             modality: (
-                data.to(device) if isinstance(data, torch.Tensor) else 
-                {k: v.to(device) for k, v in data.items()}
+                batch[modality].to(device) if modality in ["video", "audio"] else
+                {k: v.to(device) for k, v in batch[modality].items()}
             )
-            for modality, data in inputs.items()
+            for modality in enabled_modalities
         }
-        labels = labels.to(device)
         
         optimizer.zero_grad()
 
         # Forward pass
-        with torch.autocast(device_type=str(device), dtype=torch.float16):
+        with torch.cuda.amp.autocast():
             outputs = model(
-                video=inputs['video'] if 'video' in inputs else None,
-                audio=inputs['audio'] if 'audio' in inputs else None,
-                text_input_ids=inputs['text']['input_ids'] if 'text' in inputs else None,
-                text_attention_mask=inputs['text']['attention_mask'] if 'text' in inputs else None
+                video=inputs.get("video"),
+                audio=inputs.get("audio"),
+                text_input_ids=inputs["text"]["input_ids"] if "text" in inputs else None,
+                text_attention_mask=inputs["text"]["attention_mask"] if "text" in inputs else None
             )
             loss = criterion(outputs, labels)
-        
+
         # Backward pass
         scaler.scale(loss).backward()
-
-        # Gradient clipping
         scaler.unscale_(optimizer)
         torch.nn.utils.clip_grad_norm_(model.parameters(), max_grad)
-        
-        # Update the weights
         scaler.step(optimizer)
         scaler.update()
-        
-        batch_size = next(iter(inputs.values())).size(0) if inputs else 0
-        running_loss += loss.item() * batch_size
-        del inputs, labels, outputs, loss  # Free up memory
-        torch.cuda.empty_cache()  # Clear unused GPU memory
+
+        running_loss += loss.item() * labels.size(0)
 
     epoch_loss = running_loss / len(train_loader.dataset)
     return epoch_loss
@@ -115,37 +109,32 @@ def validate_one_epoch(model, enabled_modalities, val_loader, criterion, epoch, 
 
     with torch.no_grad():
         for batch in tqdm(val_loader, unit="batch", desc=f"Epoch {epoch+1}/{num_epochs} - Validation", ncols=100):
-            inputs, labels = batch
-            inputs = filter_enabled_modalities(inputs, enabled_modalities)
+            labels = batch["label"].to(device)
+
             inputs = {
                 modality: (
-                    data.to(device) if isinstance(data, torch.Tensor) else 
-                    {k: v.to(device) for k, v in data.items()}
+                    batch[modality].to(device) if modality in ["video", "audio"] else
+                    {k: v.to(device) for k, v in batch[modality].items()}
                 )
-                for modality, data in inputs.items()
+                for modality in enabled_modalities
             }
-            labels = labels.to(device)
 
             outputs = model(
-                video=inputs['video'] if 'video' in inputs else None,
-                audio=inputs['audio'] if 'audio' in inputs else None,
-                text_input_ids=inputs['text']['input_ids'] if 'text' in inputs else None,
-                text_attention_mask=inputs['text']['attention_mask'] if 'text' in inputs else None
+                video=inputs.get("video"),
+                audio=inputs.get("audio"),
+                text_input_ids=inputs["text"]["input_ids"] if "text" in inputs else None,
+                text_attention_mask=inputs["text"]["attention_mask"] if "text" in inputs else None
             )
 
             loss = criterion(outputs, labels)
-            batch_size = next(iter(inputs.values())).size(0) if inputs else 0
-            running_loss += loss.item() * batch_size
-            
+            running_loss += loss.item() * labels.size(0)
+
             _, predicted = torch.max(outputs, 1)
             total += labels.size(0)
             correct += (predicted == labels).sum().item()
-            del inputs, labels, outputs, loss  # Free up memory
-            torch.cuda.empty_cache()  # Clear unused GPU memory 
 
     epoch_loss = running_loss / len(val_loader.dataset)
     accuracy = correct / total
-
     return epoch_loss, accuracy
 
 

@@ -14,7 +14,7 @@ from torch.utils.data import DataLoader
 from functools import partial
 
 from src.models.multimodal_emotion_recognition import MultimodalEmotionRecognition
-from src.data.dataset import MultimodalEmotionDataset, collate_fn
+from src.data.dataset import MultimodalDataset, custom_collate_fn
 from src.training.train_utils import train_model
 from src.utils.logger import setup_logger
 
@@ -46,18 +46,21 @@ def train(enabled_modalities, data_dir, num_classes, batch_size, learning_rate, 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     logger.info(f'Using device: {device}')
 
-    # Load the dataset
-    train_dataset = MultimodalEmotionDataset(
-        data_dir='data/train',
-        split='train',
-        enabled_modalities=enabled_modalities
+    # Dataset initialization
+    train_dataset = MultimodalDataset(
+        data_dir='data/processed',
+        modalities=enabled_modalities,
+        split='train'
     )
-    val_dataset = MultimodalEmotionDataset(
-        data_dir='data/val',
-        split='val',
-        enabled_modalities=enabled_modalities
+    val_dataset = MultimodalDataset(
+        data_dir='data/processed',
+        modalities=enabled_modalities,
+        split='val'
     )
-    custom_collate_fn = partial(collate_fn, enabled_modalities=enabled_modalities)
+
+    custom_collate_fn = partial(custom_collate_fn, enabled_modalities=enabled_modalities)
+
+    # DataLoader initialization
     train_loader = DataLoader(
         train_dataset,
         batch_size=batch_size,
@@ -67,13 +70,14 @@ def train(enabled_modalities, data_dir, num_classes, batch_size, learning_rate, 
         collate_fn=custom_collate_fn
     )
     val_loader = DataLoader(
-        val_dataset, 
-        batch_size=batch_size, 
+        val_dataset,
+        batch_size=batch_size,
         num_workers=4,
         pin_memory=True,
-        shuffle=False, 
+        shuffle=False,
         collate_fn=custom_collate_fn
     )
+
     logger.info(f'Dataset loaded from {data_dir}.')
 
     # Initialize the model
@@ -106,9 +110,9 @@ def train(enabled_modalities, data_dir, num_classes, batch_size, learning_rate, 
 
 if __name__ == '__main__':
     # Configuration parameters
-    DATA_DIR = r'D:\Senior_Project\multimodal-emotion-recognition\data'
+    DATA_DIR = 'multimodal-emotion-recognition/data'
     NUM_CLASSES = 7
-    BATCH_SIZE = 16
+    BATCH_SIZE = 32
     LEARNING_RATE = 0.0001
     MAX_GRAD = 1
     NUM_EPOCHS = 1

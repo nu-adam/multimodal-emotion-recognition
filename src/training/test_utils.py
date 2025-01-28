@@ -2,19 +2,7 @@ from tqdm import tqdm
 import torch
 from sklearn.metrics import accuracy_score, precision_recall_fscore_support
 
-
-def filter_enabled_modalities(inputs, enabled_modalities):
-    """
-    Filters the inputs dictionary to include only the enabled modalities.
-
-    Args:
-    - inputs (dict): Dictionary containing data for all modalities.
-    - enabled_modalities (list): List of enabled modalities (e.g., ['video', 'audio', 'text']).
-
-    Returns:
-    - dict: Filtered inputs containing only the enabled modalities.
-    """
-    return {modality: inputs[modality] for modality in enabled_modalities if modality in inputs}
+from src.training.train_utils import filter_enabled_modalities
 
 
 def compute_metrics(all_labels, all_preds):
@@ -63,16 +51,21 @@ def test_model(model, enabled_modalities, data_loader, device, logger):
 
     with torch.no_grad():
         for batch in tqdm(data_loader, unit="batch", desc="Evaluation", ncols=100):
-            inputs, labels = batch, batch['label']
-            inputs = filter_enabled_modalities(inputs, enabled_modalities)
-            inputs = {modality: data.to(device) for modality, data in inputs.items()}
-            labels = labels.to(device)
+            labels = batch["label"].to(device)
+
+            inputs = {
+                modality: (
+                    batch[modality].to(device) if modality in ["video", "audio"] else
+                    {k: v.to(device) for k, v in batch[modality].items()}
+                )
+                for modality in enabled_modalities
+            }
 
             outputs = model(
-                video=inputs['video'] if 'video' in inputs else None,
-                audio=inputs['audio'] if 'audio' in inputs else None,
-                text_input_ids=inputs['text']['input_ids'] if 'text' in inputs else None,
-                text_attention_mask=inputs['text']['attention_mask'] if 'text' in inputs else None
+                video=inputs.get("video"),
+                audio=inputs.get("audio"),
+                text_input_ids=inputs["text"]["input_ids"] if "text" in inputs else None,
+                text_attention_mask=inputs["text"]["attention_mask"] if "text" in inputs else None
             )
             _, preds = torch.max(outputs, 1)
 

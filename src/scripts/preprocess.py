@@ -11,7 +11,7 @@ from insightface.app import FaceAnalysis
 import whisper
 import torchvision.transforms as T
 
-# Utility to get all video paths
+
 def get_video_paths(raw_dir):
     """
     Recursively find all video files in the dataset directory.
@@ -28,6 +28,7 @@ def get_video_paths(raw_dir):
         for f in filenames if f.endswith(".mp4")
     ]
 
+
 def ensure_directory_exists(file_path):
     """
     Ensures the parent directory of the given file path exists.
@@ -39,19 +40,31 @@ def ensure_directory_exists(file_path):
     if not os.path.exists(directory):
         os.makedirs(directory, exist_ok=True)
 
-# Video Processor
-@ray.remote(num_gpus=1)
+
+def save_chunk(output_dir, modality, chunk_id, tensors, labels):
+    """
+    Saves a chunk of tensors and labels to a .pth file.
+
+    Args:
+        output_dir (str): Base directory for processed files.
+        modality (str): Modality ('video', 'audio', or 'text').
+        chunk_id (int): Chunk ID (used for file naming).
+        tensors (list[torch.Tensor]): List of tensors to save.
+        labels (list[str]): List of emotion labels corresponding to the tensors.
+    """
+    output_path = os.path.join(output_dir, modality, f"{modality}_chunk_{chunk_id:04d}.pth")
+    ensure_directory_exists(output_path)  # Ensure the directory exists
+    torch.save({"tensors": tensors, "labels": labels}, output_path)
+    print(f"[INFO] Saved chunk {chunk_id} to {output_path}")
+
+
+@ray.remote(num_gpus=1, num_cpus=3)
 class VideoProcessor:
     def __init__(self):
-        from insightface.app import FaceAnalysis
         self.face_detector = FaceAnalysis(name="buffalo_l", providers=["CUDAExecutionProvider"])
         self.face_detector.prepare(ctx_id=0)
 
     def process_video(self, video_path):
-        import cv2
-        import torchvision.transforms as T
-        import torch
-
         cap = cv2.VideoCapture(video_path)
         fps = int(cap.get(cv2.CAP_PROP_FPS))
         frames = []
@@ -91,8 +104,8 @@ class VideoProcessor:
         return torch.stack(batched_faces)
 
 
-# Audio Processor
-@ray.remote(num_gpus=1)
+
+@ray.remote(num_cpus=3)
 class AudioProcessor:
     def __init__(self, sampling_rate=16000, n_mels=128):
         self.sampling_rate = sampling_rate
@@ -135,8 +148,8 @@ class AudioProcessor:
             print(f"[ERROR] Failed to process audio for video {video_path}: {e}")
             return None
 
-# Text Processor
-@ray.remote(num_gpus=1)
+
+@ray.remote(num_gpus=1, num_cpus=3)
 class TextProcessor:
     def __init__(self, whisper_model="base", roberta_model="roberta-base"):
         self.whisper_model = whisper.load_model(whisper_model)
@@ -168,35 +181,52 @@ class TextProcessor:
             print(f"[ERROR] Failed to process text for video {video_path}: {e}")
             return None
 
+
 @ray.remote
-def preprocess_task(video_path, processor_actor, output_dir, modality):
+def preprocess_task(video_paths, processor_actor, output_dir, modality, chunk_size=32):
     """
-    Processes a video file for a specific modality and saves the result.
+    Processes multiple video files for a specific modality, accumulates tensors/labels,
+    and saves them in chunks.
 
     Args:
-        video_path (str): Path to the video file.
+        video_paths (list[str]): List of video file paths.
         processor_actor (ray.actor.ActorHandle): Ray Actor for processing.
         output_dir (str): Base directory for processed files.
-        modality (str): Modality being processed ('video', 'audio', or 'text').
-
-    Returns:
-        str or None: Path to the saved file or None if processing failed.
+        modality (str): Modality ('video', 'audio', or 'text').
+        chunk_size (int): Number of tensors per chunk.
     """
-    result = ray.get(
-        processor_actor.process_video.remote(video_path)
-        if modality == "video"
-        else processor_actor.process_audio.remote(video_path)
-        if modality == "audio"
-        else processor_actor.process_text.remote(video_path)
-    )
-    if result is not None:
-        output_path = video_path.replace("raw", output_dir).replace(".mp4", ".pth").replace("/video/", f"/{modality}/")
-        ensure_directory_exists(output_path)  # Ensure the directory exists
-        torch.save(result, output_path)
-        return output_path
-    else:
-        print(f"[INFO] No {modality} data saved for video: {video_path}")
-        return None
+    tensors = []
+    labels = []
+    chunk_id = 0
+
+    for video_path in video_paths:
+        # Extract emotion label from the directory structure
+        label = os.path.basename(os.path.dirname(video_path))
+
+        # Process the video for the given modality
+        result = ray.get(
+            processor_actor.process_video.remote(video_path)
+            if modality == "video"
+            else processor_actor.process_audio.remote(video_path)
+            if modality == "audio"
+            else processor_actor.process_text.remote(video_path)
+        )
+
+        if result is not None:
+            tensors.append(result)
+            labels.append(label)
+
+        # If chunk size is reached, save the chunk
+        if len(tensors) == chunk_size:
+            save_chunk(output_dir, modality, chunk_id, tensors, labels)
+            tensors = []  # Reset tensors and labels for the next chunk
+            labels = []
+            chunk_id += 1
+
+    # Save any remaining tensors as the final chunk
+    if tensors:
+        save_chunk(output_dir, modality, chunk_id, tensors, labels)
+
 
 def main():
     ray.init()
@@ -207,22 +237,25 @@ def main():
     text_processor = TextProcessor.remote()
 
     raw_dir = "data/raw"
-    output_dir = "processed"
+    output_dir = "data/processed"
     video_paths = get_video_paths(raw_dir)
 
-    # Launch tasks for all modalities
+    # Split video paths into smaller batches for chunk processing
+    chunk_size = 32  # Number of tensors per chunk
+    batch_size = 64  # Number of videos per batch
+    video_batches = [video_paths[i:i + batch_size] for i in range(0, len(video_paths), batch_size)]
+
+    # Launch tasks for all modalities in parallel
     futures = []
-    for video_path in video_paths:
-        futures.append(preprocess_task.remote(video_path, video_processor, output_dir, "video"))
-        futures.append(preprocess_task.remote(video_path, audio_processor, output_dir, "audio"))
-        futures.append(preprocess_task.remote(video_path, text_processor, output_dir, "text"))
+    for batch in video_batches:
+        futures.append(preprocess_task.remote(batch, video_processor, output_dir, "video", chunk_size))
+        futures.append(preprocess_task.remote(batch, audio_processor, output_dir, "audio", chunk_size))
+        futures.append(preprocess_task.remote(batch, text_processor, output_dir, "text", chunk_size))
 
     # Wait for all tasks to complete
-    results = ray.get(futures)
-    print("Processing complete. Results saved to:")
-    for result in results:
-        if result:
-            print(result)
+    ray.get(futures)
+    print("Processing complete. Chunks saved in:", output_dir)
+
 
 if __name__ == "__main__":
     main()

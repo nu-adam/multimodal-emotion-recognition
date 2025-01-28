@@ -62,7 +62,7 @@ def save_chunk(output_dir, modality, chunk_id, video_ids, labels, tensors):
 @ray.remote(num_gpus=1, num_cpus=3)
 class VideoProcessor:
     def __init__(self):
-        self.face_detector = FaceAnalysis(name="buffalo_l", providers=["CUDAExecutionProvider"])
+        self.face_detector = FaceAnalysis(name="antelopev2", providers=["CUDAExecutionProvider"])
         self.face_detector.prepare(ctx_id=0)
 
     def process_video(self, video_path):

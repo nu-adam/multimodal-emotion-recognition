@@ -19,7 +19,7 @@ class FaceDetector:
         """
         Initializes the face detector with the InsightFace model.
         """
-        self.model = FaceAnalysis(name="buffalo_l", providers=["CUDAExecutionProvider"])
+        self.model = FaceAnalysis(name="antelopev2", providers=["CUDAExecutionProvider"])
         self.model.prepare(ctx_id=0)
 
     def detect_faces(self, frame):

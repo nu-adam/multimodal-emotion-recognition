@@ -1,6 +1,47 @@
 import os
 import torch
 from torch.utils.data import Dataset
+from torch.nn.utils.rnn import pad_sequence
+
+
+def custom_collate_fn(batch):
+    """
+    Custom collate function for multimodal data with padding.
+
+    Args:
+        batch (list[dict]): A batch of samples from the dataset.
+
+    Returns:
+        dict: A dictionary containing padded tensors for each modality.
+    """
+    collated_batch = {"label": [], "video_id": []}
+
+    # Collate video frames
+    if "video" in batch[0]:
+        video_tensors = [sample["video"] for sample in batch]
+        collated_batch["video"] = pad_sequence(video_tensors, batch_first=True, padding_value=0)
+
+    # Collate audio spectrograms
+    if "audio" in batch[0]:
+        audio_tensors = [sample["audio"] for sample in batch]
+        collated_batch["audio"] = pad_sequence(audio_tensors, batch_first=True, padding_value=0)
+
+    # Collate text data (input IDs and attention masks)
+    if "text" in batch[0]:
+        input_ids = [sample["text"]["input_ids"].squeeze(0) for sample in batch]
+        attention_masks = [sample["text"]["attention_mask"].squeeze(0) for sample in batch]
+        collated_batch["text"] = {
+            "input_ids": pad_sequence(input_ids, batch_first=True, padding_value=0),
+            "attention_mask": pad_sequence(attention_masks, batch_first=True, padding_value=0),
+        }
+
+    # Collate labels
+    collated_batch["label"] = torch.tensor([sample["label"] for sample in batch])
+
+    # Collate video IDs
+    collated_batch["video_id"] = [sample["video_id"] for sample in batch]
+
+    return collated_batch
 
 
 class MultimodalDataset(Dataset):
@@ -102,25 +143,26 @@ def main():
     print("Sample keys:", sample.keys())
     print("Video tensor shape:", sample["video"].shape)
     print("Audio tensor shape:", sample["audio"].shape)
-    print("Text tensor shape:", sample["text"].shape)
+    print("Text tensor shape:", sample["text"]["input_ids"].shape)
+    print("Text tensor shape:", sample["text"]["attention_mask"].shape)
     print("Label:", sample["label"])
     print("Video ID:", sample["video_id"])
 
     from torch.utils.data import DataLoader
 
     # Training DataLoader
-    train_loader = DataLoader(train_dataset, batch_size=16, shuffle=True)
+    train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True, collate_fn=custom_collate_fn)
 
     # Validation DataLoader
-    val_loader = DataLoader(val_dataset, batch_size=16, shuffle=False)
+    val_loader = DataLoader(val_dataset, batch_size=32, shuffle=False, collate_fn=custom_collate_fn)
 
     for batch in train_loader:
-        video = batch.get("video")  # Video tensors
-        audio = batch.get("audio")  # Audio tensors
-        text = batch.get("text")    # Text tensors
-        labels = batch["label"]     # Labels
-        video_ids = batch["video_id"]  # Video IDs
-        print(video.shape, audio.shape, text.shape, labels, video_ids)
+        print("Video shape:", batch["video"].shape)  # Should be (batch_size, max_frames, 3, 224, 224)
+        print("Audio shape:", batch["audio"].shape)  # Should be (batch_size, 3, 224, 224)
+        print("Text input IDs shape:", batch["text"]["input_ids"].shape)  # Should be (batch_size, max_text_length)
+        print("Text attention masks shape:", batch["text"]["attention_mask"].shape)
+        print("Labels shape:", batch["label"].shape)  # Should be (batch_size,)
+        print()
 
 
 if __name__ == "__main__":

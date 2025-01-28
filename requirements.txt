@@ -1,9 +1,17 @@
-facenet-pytorch
-transformers
+--extra-index-url https://download.pytorch.org/whl/cu124 
+torch 
+torchvision 
+ 
+numpy 
+pillow 
+opencv-python 
+librosa 
+soundfile 
+transformers 
+openai-whisper 
+ray 
+insightface 
+onnxruntime-gpu 
+scikit-learn 
+transformers 
 tqdm
-numpy
-av
-librosa
-opencv-python
-scikit-learn
-openai-whisper

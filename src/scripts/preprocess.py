@@ -41,20 +41,21 @@ def ensure_directory_exists(file_path):
         os.makedirs(directory, exist_ok=True)
 
 
-def save_chunk(output_dir, modality, chunk_id, tensors, labels):
+def save_chunk(output_dir, modality, chunk_id, video_ids, labels, tensors):
     """
-    Saves a chunk of tensors and labels to a .pth file.
+    Saves a chunk of tensors, labels, and video IDs to a .pth file.
 
     Args:
         output_dir (str): Base directory for processed files.
         modality (str): Modality ('video', 'audio', or 'text').
         chunk_id (int): Chunk ID (used for file naming).
-        tensors (list[torch.Tensor]): List of tensors to save.
+        video_ids (list[str]): List of video filenames corresponding to the tensors.
         labels (list[str]): List of emotion labels corresponding to the tensors.
+        tensors (list[torch.Tensor]): List of tensors to save.        
     """
     output_path = os.path.join(output_dir, modality, f"{modality}_chunk_{chunk_id:04d}.pth")
     ensure_directory_exists(output_path)  # Ensure the directory exists
-    torch.save({"tensors": tensors, "labels": labels}, output_path)
+    torch.save({"video_ids": video_ids, "labels": labels, "tensors": tensors}, output_path)
     print(f"[INFO] Saved chunk {chunk_id} to {output_path}")
 
 
@@ -185,7 +186,7 @@ class TextProcessor:
 def preprocess_task(video_paths, processor_actor, output_dir, modality, chunk_size=32, split="train"):
     """
     Processes multiple video files for a specific modality and split,
-    accumulates tensors/labels, and saves them in chunks.
+    accumulates tensors/labels/video_ids, and saves them in chunks.
 
     Args:
         video_paths (list[str]): List of video file paths.
@@ -200,13 +201,15 @@ def preprocess_task(video_paths, processor_actor, output_dir, modality, chunk_si
     """
     tensors = []
     labels = []
+    video_ids = []
     chunk_id = 0
 
     for video_path in video_paths:
-        # Extract emotion label
+        # Extract emotion label and video ID
         label = os.path.basename(os.path.dirname(video_path))
+        video_id = os.path.basename(video_path)
 
-        # Process the video
+        # Process the video for the given modality
         result = ray.get(
             processor_actor.process_video.remote(video_path)
             if modality == "video"
@@ -218,21 +221,23 @@ def preprocess_task(video_paths, processor_actor, output_dir, modality, chunk_si
         if result is not None:
             tensors.append(result)
             labels.append(label)
+            video_ids.append(video_id)
 
         # Save chunk when size limit is reached
         if len(tensors) == chunk_size:
-            save_chunk(os.path.join(output_dir, split), modality, chunk_id, tensors, labels)
-            tensors = []
+            save_chunk(os.path.join(output_dir, split), modality, chunk_id, video_ids, labels, tensors)
+            video_ids = []
             labels = []
+            tensors = []
             chunk_id += 1
 
     # Save remaining tensors
     if tensors:
-        save_chunk(os.path.join(output_dir, split), modality, chunk_id, tensors, labels)
+        save_chunk(os.path.join(output_dir, split), modality, chunk_id, tensors, labels, video_ids)
 
 
 def main():
-    ray.init()
+    ray.init(include_dashboard=True)
 
     # Initialize processors
     video_processor = VideoProcessor.remote()
@@ -260,3 +265,25 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+    # Load a video chunk
+    video_data = torch.load("data/processed/train/video/video_chunk_0000.pth")
+    audio_data = torch.load("data/processed/train/audio/audio_chunk_0000.pth")
+    text_data = torch.load("data/processed/train/text/text_chunk_0000.pth")
+
+    # Match data using video IDs
+    video_ids = set(video_data["video_ids"])  # Get the video IDs from the video chunk
+    aligned_video_tensors = []
+    aligned_audio_tensors = []
+    aligned_text_tensors = []
+    aligned_labels = []
+
+    for i, video_id in enumerate(video_data["video_ids"]):
+        if video_id in video_ids:
+            aligned_video_tensors.append(video_data["tensors"][i])
+            aligned_audio_tensors.append(audio_data["tensors"][i])
+            aligned_text_tensors.append(text_data["tensors"][i])
+            aligned_labels.append(video_data["labels"][i])  # Assuming labels are consistent across modalities
+
+    # Check alignment
+    print(f"Aligned {len(aligned_video_tensors)} samples.")

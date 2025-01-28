@@ -104,8 +104,7 @@ class VideoProcessor:
         return torch.stack(batched_faces)
 
 
-
-@ray.remote(num_cpus=3)
+@ray.remote(num_cpus=8)
 class AudioProcessor:
     def __init__(self, sampling_rate=16000, n_mels=128):
         self.sampling_rate = sampling_rate
@@ -183,10 +182,10 @@ class TextProcessor:
 
 
 @ray.remote
-def preprocess_task(video_paths, processor_actor, output_dir, modality, chunk_size=32):
+def preprocess_task(video_paths, processor_actor, output_dir, modality, chunk_size=32, split="train"):
     """
-    Processes multiple video files for a specific modality, accumulates tensors/labels,
-    and saves them in chunks.
+    Processes multiple video files for a specific modality and split,
+    accumulates tensors/labels, and saves them in chunks.
 
     Args:
         video_paths (list[str]): List of video file paths.
@@ -194,16 +193,20 @@ def preprocess_task(video_paths, processor_actor, output_dir, modality, chunk_si
         output_dir (str): Base directory for processed files.
         modality (str): Modality ('video', 'audio', or 'text').
         chunk_size (int): Number of tensors per chunk.
+        split (str): Dataset split ('train', 'val', or 'test').
+
+    Returns:
+        None
     """
     tensors = []
     labels = []
     chunk_id = 0
 
     for video_path in video_paths:
-        # Extract emotion label from the directory structure
+        # Extract emotion label
         label = os.path.basename(os.path.dirname(video_path))
 
-        # Process the video for the given modality
+        # Process the video
         result = ray.get(
             processor_actor.process_video.remote(video_path)
             if modality == "video"
@@ -216,16 +219,16 @@ def preprocess_task(video_paths, processor_actor, output_dir, modality, chunk_si
             tensors.append(result)
             labels.append(label)
 
-        # If chunk size is reached, save the chunk
+        # Save chunk when size limit is reached
         if len(tensors) == chunk_size:
-            save_chunk(output_dir, modality, chunk_id, tensors, labels)
-            tensors = []  # Reset tensors and labels for the next chunk
+            save_chunk(os.path.join(output_dir, split), modality, chunk_id, tensors, labels)
+            tensors = []
             labels = []
             chunk_id += 1
 
-    # Save any remaining tensors as the final chunk
+    # Save remaining tensors
     if tensors:
-        save_chunk(output_dir, modality, chunk_id, tensors, labels)
+        save_chunk(os.path.join(output_dir, split), modality, chunk_id, tensors, labels)
 
 
 def main():
@@ -238,23 +241,21 @@ def main():
 
     raw_dir = "data/raw"
     output_dir = "data/processed"
-    video_paths = get_video_paths(raw_dir)
 
-    # Split video paths into smaller batches for chunk processing
-    chunk_size = 32  # Number of tensors per chunk
-    batch_size = 64  # Number of videos per batch
-    video_batches = [video_paths[i:i + batch_size] for i in range(0, len(video_paths), batch_size)]
+    # Get split-specific video paths
+    splits = ["train", "val", "test"]
+    video_paths_by_split = {split: get_video_paths(os.path.join(raw_dir, split)) for split in splits}
 
-    # Launch tasks for all modalities in parallel
+    # Process each split separately
     futures = []
-    for batch in video_batches:
-        futures.append(preprocess_task.remote(batch, video_processor, output_dir, "video", chunk_size))
-        futures.append(preprocess_task.remote(batch, audio_processor, output_dir, "audio", chunk_size))
-        futures.append(preprocess_task.remote(batch, text_processor, output_dir, "text", chunk_size))
+    for split, video_paths in video_paths_by_split.items():
+        futures.append(preprocess_task.remote(video_paths, video_processor, output_dir, "video", split=split))
+        futures.append(preprocess_task.remote(video_paths, audio_processor, output_dir, "audio", split=split))
+        futures.append(preprocess_task.remote(video_paths, text_processor, output_dir, "text", split=split))
 
     # Wait for all tasks to complete
     ray.get(futures)
-    print("Processing complete. Chunks saved in:", output_dir)
+    print("Processing complete.")
 
 
 if __name__ == "__main__":

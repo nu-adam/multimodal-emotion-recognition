@@ -9,7 +9,7 @@ import logging
 import torch
 import torch.optim as optim
 import torch.nn as nn
-from torch.cuda.amp import GradScaler
+from torch.amp import GradScaler
 from torch.utils.data import DataLoader
 from functools import partial
 
@@ -87,7 +87,6 @@ def train(enabled_modalities, data_dir, num_classes, batch_size, learning_rate, 
     optimizer = optim.Adam(model.parameters(), lr=learning_rate)
     scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=10, gamma=0.1)
     scaler = GradScaler()
-    # scaler = torch.GradScaler(str(device))
 
     logger.info(f'Configuration:\n'
                 f'Batch Size: {batch_size}\n'

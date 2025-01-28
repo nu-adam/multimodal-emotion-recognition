@@ -233,7 +233,7 @@ def preprocess_task(video_paths, processor_actor, output_dir, modality, chunk_si
 
     # Save remaining tensors
     if tensors:
-        save_chunk(os.path.join(output_dir, split), modality, chunk_id, tensors, labels, video_ids)
+        save_chunk(os.path.join(output_dir, split), modality, chunk_id, video_ids, labels, tensors)
 
 
 def main():
@@ -265,25 +265,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-    # Load a video chunk
-    video_data = torch.load("data/processed/train/video/video_chunk_0000.pth")
-    audio_data = torch.load("data/processed/train/audio/audio_chunk_0000.pth")
-    text_data = torch.load("data/processed/train/text/text_chunk_0000.pth")
-
-    # Match data using video IDs
-    video_ids = set(video_data["video_ids"])  # Get the video IDs from the video chunk
-    aligned_video_tensors = []
-    aligned_audio_tensors = []
-    aligned_text_tensors = []
-    aligned_labels = []
-
-    for i, video_id in enumerate(video_data["video_ids"]):
-        if video_id in video_ids:
-            aligned_video_tensors.append(video_data["tensors"][i])
-            aligned_audio_tensors.append(audio_data["tensors"][i])
-            aligned_text_tensors.append(text_data["tensors"][i])
-            aligned_labels.append(video_data["labels"][i])  # Assuming labels are consistent across modalities
-
-    # Check alignment
-    print(f"Aligned {len(aligned_video_tensors)} samples.")

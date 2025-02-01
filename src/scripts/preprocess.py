@@ -59,10 +59,10 @@ def save_chunk(output_dir, modality, chunk_id, video_ids, labels, tensors):
     print(f"[INFO] Saved chunk {chunk_id} to {output_path}")
 
 
-@ray.remote(num_gpus=1, num_cpus=3)
+@ray.remote(num_gpus=1, num_cpus=8)
 class VideoProcessor:
     def __init__(self):
-        self.face_detector = FaceAnalysis(name="antelopev2", providers=["CUDAExecutionProvider"])
+        self.face_detector = FaceAnalysis(name="buffalo_l", providers=["CUDAExecutionProvider"])
         self.face_detector.prepare(ctx_id=0)
 
     def process_video(self, video_path):
@@ -97,7 +97,8 @@ class VideoProcessor:
 
                 resized = cv2.resize(cropped, (224, 224))
                 tensor = T.ToTensor()(resized)
-                batched_faces.append(tensor)
+                normalized_tensor = T.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])(tensor)
+                batched_faces.append(normalized_tensor)
 
         if not batched_faces:
             print(f"[INFO] No faces detected in video: {video_path}")
@@ -105,7 +106,7 @@ class VideoProcessor:
         return torch.stack(batched_faces)
 
 
-@ray.remote(num_cpus=8)
+@ray.remote(num_cpus=12)
 class AudioProcessor:
     def __init__(self, sampling_rate=16000, n_mels=128):
         self.sampling_rate = sampling_rate
@@ -140,7 +141,11 @@ class AudioProcessor:
                 mode="bilinear",
                 align_corners=False,
             ).squeeze()
-            return mel_resized.repeat(3, 1, 1)
+            mel_resized_rgb = mel_resized.repeat(3, 1, 1)
+            normalize = T.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+            mel_resized_rgb_normalized = normalize(mel_resized_rgb)
+
+            return mel_resized_rgb_normalized
         except subprocess.CalledProcessError:
             print(f"[INFO] No audio stream found in video: {video_path}")
             return None
@@ -149,7 +154,7 @@ class AudioProcessor:
             return None
 
 
-@ray.remote(num_gpus=1, num_cpus=3)
+@ray.remote(num_gpus=1, num_cpus=8)
 class TextProcessor:
     def __init__(self, whisper_model="base", roberta_model="roberta-base"):
         self.whisper_model = whisper.load_model(whisper_model)
@@ -174,7 +179,7 @@ class TextProcessor:
                 return_tensors="pt",
                 padding="max_length",
                 truncation=True,
-                max_length=512,
+                max_length=128,
             )
             return {"input_ids": encoded["input_ids"], "attention_mask": encoded["attention_mask"]}
         except Exception as e:
@@ -265,3 +270,31 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+    # tesnors = torch.load("data/processed/train/video/video_chunk_0007.pth")
+    # keys = tesnors.keys()
+    # print(keys)
+    # print(tesnors["tensors"][0])
+    # print(tesnors["tensors"][0][0].min().item())
+    
+    #     # Load the tensor file
+    # audio_tensors = torch.load("data/processed/train/video/video_chunk_0007.pth")
+
+    # # Extract the first tensor
+    # tensor_sample = audio_tensors["tensors"][0][0]  # Select the first tensor sample
+
+    # # Convert to NumPy array
+    # tensor_sample_np = tensor_sample.cpu().numpy()
+
+    # # Compute standard deviation
+    # stdev = np.std(tensor_sample_np)
+    # print(f"Standard Deviation: {stdev}")
+    
+    # all_means = []
+    # all_stds = []
+    # for i in range(len(audio_tensors["tensors"])):
+    #     sample = audio_tensors["tensors"][i].cpu().numpy()
+    #     all_means.append(np.mean(sample))
+    #     all_stds.append(np.std(sample))
+
+    # print(f"Overall Mean: {np.mean(all_means)}, Overall Std: {np.mean(all_stds)}")

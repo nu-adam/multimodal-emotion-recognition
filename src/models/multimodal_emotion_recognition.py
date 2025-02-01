@@ -5,6 +5,7 @@ from src.models.fusion import TransformerFusion
 from src.models.decoder import Decoder
 
 import torch.nn as nn
+from torch.utils.checkpoint import checkpoint
 
 
 class MultimodalEmotionRecognition(nn.Module):
@@ -43,13 +44,16 @@ class MultimodalEmotionRecognition(nn.Module):
         """
         modalities_embeddings = []
         if 'video' in self.enabled_modalities:
-            video_features = self.video_encoder(video)
+            # video_features = self.video_encoder(video)
+            video_features = checkpoint(self.video_encoder, video)
             modalities_embeddings.append(video_features)
         if 'audio' in self.enabled_modalities:
-            audio_features = self.audio_encoder(audio)
+            # audio_features = self.audio_encoder(audio)
+            audio_features = checkpoint(self.audio_encoder, audio)
             modalities_embeddings.append(audio_features)
         if 'text' in self.enabled_modalities:
-            text_features = self.text_encoder(text_input_ids, text_attention_mask)
+            # text_features = self.text_encoder(text_input_ids, text_attention_mask)
+            text_features = checkpoint(self.text_encoder, text_input_ids, text_attention_mask)
             modalities_embeddings.append(text_features)
 
         fused_features = self.fusion(modalities_embeddings)

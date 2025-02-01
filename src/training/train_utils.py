@@ -28,7 +28,7 @@ def save_model(state, checkpoint_dir):
     torch.save(state, filename)
 
 
-def train_one_epoch(model, enabled_modalities, train_loader, criterion, optimizer, max_grad, scaler, epoch, num_epochs, device):
+def train_one_epoch(model, enabled_modalities, train_loader, criterion, optimizer, accumulation_steps, max_grad, scaler, epoch, num_epochs, device):
     """
     Trains the model on the train dataset for one epoch.
 
@@ -47,8 +47,9 @@ def train_one_epoch(model, enabled_modalities, train_loader, criterion, optimize
     """
     model.train()
     running_loss = 0.0
+    optimizer.zero_grad()
 
-    for batch in tqdm(train_loader, unit="batch", desc=f"Epoch {epoch+1}/{num_epochs} - Training", ncols=100):
+    for idx, batch in enumerate(tqdm(train_loader, unit="batch", desc=f"Epoch {epoch+1}/{num_epochs} - Training", ncols=100)):
         # Extract labels
         labels = batch["label"].to(device)
 
@@ -60,27 +61,34 @@ def train_one_epoch(model, enabled_modalities, train_loader, criterion, optimize
             )
             for modality in enabled_modalities
         }
-        
-        optimizer.zero_grad()
 
         # Forward pass
-        with torch.cuda.amp.autocast():
+        with torch.amp.autocast(str(device), dtype=torch.float16):
             outputs = model(
                 video=inputs.get("video"),
                 audio=inputs.get("audio"),
                 text_input_ids=inputs["text"]["input_ids"] if "text" in inputs else None,
                 text_attention_mask=inputs["text"]["attention_mask"] if "text" in inputs else None
             )
-            loss = criterion(outputs, labels)
+            loss = criterion(outputs, labels) / accumulation_steps
 
         # Backward pass
         scaler.scale(loss).backward()
-        scaler.unscale_(optimizer)
-        torch.nn.utils.clip_grad_norm_(model.parameters(), max_grad)
-        scaler.step(optimizer)
-        scaler.update()
+        
+        if (idx + 1) % accumulation_steps == 0 or idx == len(train_loader) - 1:
+            # Gradient clipping
+            scaler.unscale_(optimizer)
+            torch.nn.utils.clip_grad_norm_(model.parameters(), max_grad)
+            
+            # Step optimizer
+            scaler.step(optimizer)
+            scaler.update()
+            optimizer.zero_grad()
 
-        running_loss += loss.item() * labels.size(0)
+        running_loss += loss.item() * labels.size(0) * accumulation_steps
+        
+        del inputs, labels, outputs, loss
+        torch.cuda.empty_cache()
 
     epoch_loss = running_loss / len(train_loader.dataset)
     return epoch_loss
@@ -105,7 +113,7 @@ def validate_one_epoch(model, enabled_modalities, val_loader, criterion, epoch, 
     model.eval()
     running_loss = 0.0
     correct = 0
-    total = 0
+    total = 0 
 
     with torch.no_grad():
         for batch in tqdm(val_loader, unit="batch", desc=f"Epoch {epoch+1}/{num_epochs} - Validation", ncols=100):
@@ -118,20 +126,27 @@ def validate_one_epoch(model, enabled_modalities, val_loader, criterion, epoch, 
                 )
                 for modality in enabled_modalities
             }
+            
+            # Forward pass
+            with torch.amp.autocast(str(device), dtype=torch.float16):
+                outputs = model(
+                    video=inputs.get("video"),
+                    audio=inputs.get("audio"),
+                    text_input_ids=inputs["text"]["input_ids"] if "text" in inputs else None,
+                    text_attention_mask=inputs["text"]["attention_mask"] if "text" in inputs else None
+                )
 
-            outputs = model(
-                video=inputs.get("video"),
-                audio=inputs.get("audio"),
-                text_input_ids=inputs["text"]["input_ids"] if "text" in inputs else None,
-                text_attention_mask=inputs["text"]["attention_mask"] if "text" in inputs else None
-            )
-
-            loss = criterion(outputs, labels)
+                loss = criterion(outputs, labels)
+                
             running_loss += loss.item() * labels.size(0)
 
+             # Compute accuracy
             _, predicted = torch.max(outputs, 1)
             total += labels.size(0)
             correct += (predicted == labels).sum().item()
+            
+            del inputs, labels, outputs, loss
+            torch.cuda.empty_cache()
 
     epoch_loss = running_loss / len(val_loader.dataset)
     accuracy = correct / total
@@ -140,13 +155,15 @@ def validate_one_epoch(model, enabled_modalities, val_loader, criterion, epoch, 
 
 def train_model(
         model, enabled_modalities, train_loader, val_loader,
-        criterion, optimizer, scheduler, max_grad, scaler,
-        num_epochs, device, checkpoint_dir, logger
+        criterion, optimizer, accumulation_steps, scheduler, 
+        max_grad, scaler, num_epochs, device, checkpoint_dir, logger
         ):
     """
     Trains and validates the Face Emotion Recognition model using specified model.
     
     Args:
+    - rank (int): Process rank in distributed training.
+    - model (torch.nn.parallel.DistributedDataParallel): The DDP-wrapped model.
     - model (nn.Module): Face Emotion Recognition model for training.
     - enabled_modalities (list): List of enabled modalities (e.g., ['video', 'audio', 'text']).
     - train_loader (DataLoader): DataLoader for the training dataset.
@@ -163,36 +180,32 @@ def train_model(
 
     for epoch in range(num_epochs):
         # Train for one epoch
-        train_loss = train_one_epoch(model, enabled_modalities, train_loader, criterion, optimizer, max_grad, scaler, epoch, num_epochs, device)
-
+        train_loss = train_one_epoch(model, enabled_modalities, train_loader, criterion, 
+                                     optimizer, accumulation_steps, max_grad, 
+                                     scaler, epoch, num_epochs, device)
         logger.info(f'Epoch {epoch+1}/{num_epochs} - Training Loss: {train_loss:.4f}')
 
         # Validate after one epoch
-        val_loss, val_accuracy = validate_one_epoch(model, enabled_modalities, val_loader, criterion, epoch, num_epochs, device)
-
+        val_loss, val_accuracy = validate_one_epoch(model, enabled_modalities, val_loader, 
+                                                    criterion, epoch, num_epochs, device)
         logger.info(f'Epoch {epoch+1}/{num_epochs} - Validation Loss: {val_loss:.4f}, Accuracy: {val_accuracy*100:.2f}%')
 
         # Step the scheduler
         scheduler.step()
 
-        current_lr = optimizer.param_groups[0]['lr']
-        logger.info(f'Epoch {epoch+1}/{num_epochs} - Learning Rate: {current_lr:.6f}')
-
         # Save the best model checkpoint
         if val_loss < best_loss:
             best_loss = val_loss 
             checkpoint = {
-            'epoch': epoch + 1,
-            'model_state_dict': model.state_dict(),
-            'optimizer_state_dict': optimizer.state_dict(),
-            'train_loss': train_loss,
-            'val_loss': val_loss,
-            'val_accuracy': val_accuracy
+                'epoch': epoch + 1,
+                'model_state_dict': model.state_dict(),
+                'optimizer_state_dict': optimizer.state_dict(),
+                'train_loss': train_loss,
+                'val_loss': val_loss,
+                'val_accuracy': val_accuracy
             }
             save_model(checkpoint, checkpoint_dir=checkpoint_dir)
-
             logger.info(f'Model checkpoint saved at epoch {epoch+1} to {checkpoint_dir}')
-
         logger.info(f'Epoch {epoch+1}/{num_epochs} - Best Validation Loss: {best_loss:.4f}')
     
     logger.info('Training finished successfully.')

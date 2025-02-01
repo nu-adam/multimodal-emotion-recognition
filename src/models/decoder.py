@@ -14,7 +14,7 @@ class Decoder(nn.Module):
         self.classifier = nn.Sequential(
             nn.Linear(embed_dim, embed_dim // 2),
             nn.ReLU(),
-            nn.Dropout(0.3),
+            # nn.Dropout(0.3),
             nn.Linear(embed_dim // 2, num_classes),
             nn.Sigmoid()
         )

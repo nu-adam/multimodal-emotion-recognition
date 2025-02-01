@@ -18,7 +18,7 @@ class VideoEncoder(nn.Module):
         self.feature_extractor = VGGFeatureExtractor()
         self.projection_network = ProjectionNetwork(input_dim=512, output_dim=embed_dim)
         self.transformer_encoder = TransformerEncoder(embed_dim, num_heads, num_layers)
-        self.positional_encoding = nn.Parameter(torch.randn(1, 49, embed_dim))
+        # self.positional_encoding = nn.Parameter(torch.randn(1, 49, embed_dim))
 
     def forward(self, x):
         """
@@ -52,7 +52,7 @@ class VideoEncoder(nn.Module):
         x = x.mean(dim=2)  # Shape: (batch_size, frames, embed_dim)
 
         # Add positional encoding for temporal dimension
-        x = x + self.positional_encoding[:, :frames, :]  # Shape: (batch_size, frames, embed_dim)
+        # x = x + self.positional_encoding[:, :frames, :]  # Shape: (batch_size, frames, embed_dim)
 
         # Process with the transformer encoder
         x = self.transformer_encoder(x)  # Shape: (batch_size, frames, embed_dim)

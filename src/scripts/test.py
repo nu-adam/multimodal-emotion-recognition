@@ -10,7 +10,7 @@ import torch
 from torch.utils.data import DataLoader
 from functools import partial
 
-from src.data.dataset import MultimodalEmotionDataset, collate_fn
+from src.data.dataset import MultimodalDataset, custom_collate_fn
 from src.models.multimodal_emotion_recognition import MultimodalEmotionRecognition
 from src.training.test_utils import test_model
 from src.utils.logger import setup_logger
@@ -40,17 +40,21 @@ def test(enabled_modalities, data_dir, num_classes, batch_size, checkpoint_dir, 
     logger.info(f'Using device: {device}')
 
     # Load the dataset
-    test_dataset = MultimodalEmotionDataset(
-        data_dir='data/val',
+    test_dataset = MultimodalDataset(
+        data_dir='data/processed',
         split='test',
-        enabled_modalities=['video', 'audio', 'text']
+        modalities=['video', 'audio', 'text']
     )
-    custom_collate_fn = partial(collate_fn, enabled_modalities=enabled_modalities)
+    
+    collate_fn = partial(custom_collate_fn, modalities=enabled_modalities)
+    
     test_loader = DataLoader(
         test_dataset, 
-        batch_size=batch_size, 
+        batch_size=batch_size,
+        num_workers=12,
+        pin_memory=True,
         shuffle=False, 
-        collate_fn=custom_collate_fn
+        collate_fn=collate_fn
     )
     logger.info(f'Test dataset loaded from {data_dir}.')
 
@@ -69,6 +73,7 @@ def test(enabled_modalities, data_dir, num_classes, batch_size, checkpoint_dir, 
         return
 
     checkpoint = torch.load(checkpoint_path, map_location=device)
+    print(checkpoint.keys())
     model.load_state_dict(checkpoint['model_state_dict'])
     logger.info(f'Model checkpoint loaded from {checkpoint_path}.')
 
@@ -85,7 +90,7 @@ def test(enabled_modalities, data_dir, num_classes, batch_size, checkpoint_dir, 
 
 if __name__ == '__main__':
     # Configuration parameters
-    DATA_DIR = r'C:\dev\her-emotion-recognition\data'
+    DATA_DIR = 'multimodal-emotion-recognition/data'
     NUM_CLASSES = 7
     BATCH_SIZE = 32
     CHECKPOINT_DIR = 'results/checkpoints/'
